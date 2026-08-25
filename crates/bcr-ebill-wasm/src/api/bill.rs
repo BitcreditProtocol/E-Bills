@@ -44,8 +44,8 @@ use crate::{
             PastEndorseesResponse, PastPaymentsResponse, RejectActionBillPayload,
             RequestRecourseForAcceptancePayload, RequestRecourseForPaymentPayload,
             RequestToAcceptBitcreditBillPayload, RequestToMintBitcreditBillPayload,
-            RequestToPayAsMintBitcreditBillPayload, RequestToPayBitcreditBillPayload,
-            ResyncBillPayload, ShareBillWithCourtPayload,
+            RequestToMintBitcreditBillReissuePayload, RequestToPayAsMintBitcreditBillPayload,
+            RequestToPayBitcreditBillPayload, ResyncBillPayload, ShareBillWithCourtPayload,
         },
         mint::MintRequestStateResponse,
         parse_deadline_string,
@@ -818,6 +818,34 @@ impl Bill {
                 )
                 .await?;
 
+            Ok(())
+        }
+        .await;
+        TSResult::res_to_js(res)
+    }
+
+    #[wasm_bindgen(unchecked_return_type = "TSResult<void>")]
+    pub async fn request_to_mint_reissue(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "RequestToMintBitcreditBillReissuePayload")]
+        payload: JsValue,
+    ) -> JsValue {
+        let res: Result<()> = async {
+            let request: RequestToMintBitcreditBillReissuePayload =
+                serde_wasm_bindgen::from_value(payload)?;
+            let timestamp = Timestamp::now();
+            let (signer_public_data, signer_keys) = get_signer_public_data_and_keys().await?;
+            get_ctx()
+                .bill_service
+                .request_to_mint_reissue(
+                    &request.bill_id,
+                    &NodeId::from_str(&request.mint_node).map_err(ProtocolValidationError::from)?,
+                    &signer_public_data,
+                    &signer_keys,
+                    timestamp,
+                    &request.signed_reissue_permit_json,
+                )
+                .await?;
             Ok(())
         }
         .await;

@@ -753,6 +753,170 @@ impl BillService {
 
         Ok(file_urls)
     }
+
+    async fn request_to_mint_with_optional_reissue(
+        &self,
+        bill_id: &BillId,
+        mint_node_id: &NodeId,
+        signer_public_data: &BillParticipant,
+        signer_keys: &BcrKeys,
+        timestamp: Timestamp,
+        signed_reissue_permit_json: Option<&str>,
+    ) -> Result<()> {
+        let candidate_reissued_quote_id = match signed_reissue_permit_json {
+            Some(signed_permit) => Some(external::mint::validate_quote_reissue_permit(
+                signed_permit,
+                bill_id,
+                &signer_public_data.node_id(),
+            )?),
+            None => None,
+        };
+        validate_bill_id_network(bill_id)?;
+        validate_node_id_network(&signer_public_data.node_id())?;
+        validate_node_id_network(mint_node_id)?;
+        debug!("Executing request to mint with mint {mint_node_id} for bill {bill_id}");
+        let mint_cfg = &get_config().mint_config;
+        if mint_cfg.default_mint_node_id != *mint_node_id {
+            return Err(Error::Validation(ValidationError::InvalidMint(
+                mint_node_id.to_string(),
+            )));
+        }
+
+        let identity = self.identity_store.get().await?;
+        let contacts = self.contact_store.get_map().await?;
+        let blockchain = self.blockchain_store.get_chain(bill_id).await?;
+        let bill_keys = self.store.get_keys(bill_id).await?;
+        let bill = self
+            .get_last_version_bill(&blockchain, &bill_keys, &identity, &contacts)
+            .await?;
+        let is_paid = self.store.is_paid(bill_id).await?;
+
+        let mint_anon_participant = self.get_participant_for_mint(mint_node_id, &identity).await;
+        BillValidateActionData {
+            blockchain: blockchain.clone(),
+            drawee_node_id: bill.drawee.node_id.clone(),
+            payee_node_id: bill.payee.node_id().clone(),
+            endorsee_node_id: bill.endorsee.clone().map(|e| e.node_id()),
+            maturity_date: bill.maturity_date.clone(),
+            bill_keys: bill_keys.clone(),
+            timestamp,
+            signer_node_id: signer_public_data.node_id().clone(),
+            is_paid,
+            mode: BillValidationActionMode::Deep(BillAction::Mint(
+                mint_anon_participant.clone(),
+                bill.sum.clone(),
+            )),
+        }
+        .validate()?;
+
+        let requests_to_mint_for_bill_and_mint = self
+            .mint_store
+            .get_requests(&signer_public_data.node_id(), bill_id, mint_node_id)
+            .await?;
+        let has_active_request = requests_to_mint_for_bill_and_mint.iter().any(|rtm| {
+            matches!(
+                rtm.status,
+                MintRequestStatus::Pending
+                    | MintRequestStatus::Offered
+                    | MintRequestStatus::Accepted
+            )
+        });
+        let is_replay_candidate = candidate_reissued_quote_id.is_some_and(|quote_id| {
+            requests_to_mint_for_bill_and_mint
+                .iter()
+                .any(|request| request.mint_request_id == quote_id)
+        });
+        if has_active_request && !is_replay_candidate {
+            return Err(Error::Validation(
+                ValidationError::RequestToMintForBillAndMintAlreadyActive,
+            ));
+        }
+
+        let file_urls_for_mint = self
+            .upload_bill_files_for_node_id(
+                bill_id,
+                &bill_keys.get_private_key(),
+                &mint_anon_participant.node_id().pub_key(),
+                &bill_keys,
+                &bill.files,
+            )
+            .await?;
+        let bill_to_share = create_bill_to_share_with_external_party(
+            bill_id,
+            &blockchain,
+            &bill_keys,
+            &mint_anon_participant.node_id().pub_key(),
+            signer_keys,
+            &file_urls_for_mint,
+        )
+        .map_err(|e| Error::Protocol(e.into()))?;
+        let mint_request_id = match signed_reissue_permit_json {
+            Some(signed_permit) => {
+                self.mint_client
+                    .enquire_mint_quote_reissue(
+                        &mint_cfg.default_mint_url,
+                        bill_to_share,
+                        signer_keys,
+                        signed_permit,
+                    )
+                    .await?
+            }
+            None => {
+                self.mint_client
+                    .enquire_mint_quote(&mint_cfg.default_mint_url, bill_to_share, signer_keys)
+                    .await?
+            }
+        };
+        if candidate_reissued_quote_id.is_some_and(|expected| expected != mint_request_id) {
+            return Err(Error::ExternalApi(external::Error::ExternalMintApi(
+                external::mint::Error::InvalidQuoteReissuePermit,
+            )));
+        }
+
+        // Only the Mint can authenticate the AI permit. Once it has replayed the exact quote id,
+        // a matching local record proves the earlier response reached this node and must not be
+        // inserted twice. The parsed browser payload alone never authorizes this success path.
+        let replayed_persisted_reissue = signed_reissue_permit_json.is_some()
+            && requests_to_mint_for_bill_and_mint
+                .iter()
+                .any(|request| request.mint_request_id == mint_request_id);
+        if !replayed_persisted_reissue {
+            self.mint_store
+                .add_request(
+                    &signer_public_data.node_id(),
+                    bill_id,
+                    mint_node_id,
+                    &mint_request_id,
+                    timestamp,
+                )
+                .await?;
+        }
+        self.recalculate_and_persist_bill(
+            bill_id,
+            &blockchain,
+            &bill_keys,
+            &identity,
+            signer_public_data,
+            signer_keys,
+            timestamp,
+        )
+        .await?;
+
+        if let Err(e) = self
+            .transport_service
+            .send_request_to_mint_event(
+                &signer_public_data.node_id(),
+                &mint_anon_participant,
+                &bill,
+            )
+            .await
+        {
+            error!("Couldn't send notifications for request to mint: {e}");
+        }
+
+        debug!("Executed request to mint with mint {mint_node_id} for bill {bill_id}");
+        Ok(())
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
@@ -1495,129 +1659,35 @@ impl BillServiceApi for BillService {
         signer_keys: &BcrKeys,
         timestamp: Timestamp,
     ) -> Result<()> {
-        validate_bill_id_network(bill_id)?;
-        validate_node_id_network(&signer_public_data.node_id())?;
-        validate_node_id_network(mint_node_id)?;
-        debug!("Executing request to mint with mint {mint_node_id} for bill {bill_id}");
-        let mint_cfg = &get_config().mint_config;
-        // make sure the mint is a valid one - currently just checks it against the default mint
-        if mint_cfg.default_mint_node_id != *mint_node_id {
-            return Err(Error::Validation(ValidationError::InvalidMint(
-                mint_node_id.to_string(),
-            )));
-        }
-        // fetch data
-        let identity = self.identity_store.get().await?;
-        let contacts = self.contact_store.get_map().await?;
-        let blockchain = self.blockchain_store.get_chain(bill_id).await?;
-        let bill_keys = self.store.get_keys(bill_id).await?;
-        let bill = self
-            .get_last_version_bill(&blockchain, &bill_keys, &identity, &contacts)
-            .await?;
-        let is_paid = self.store.is_paid(bill_id).await?;
-
-        let mint_anon_participant = self.get_participant_for_mint(mint_node_id, &identity).await;
-        // validate using mint bill action - no point doing a mint request, if it can't be minted
-        BillValidateActionData {
-            blockchain: blockchain.clone(),
-            drawee_node_id: bill.drawee.node_id.clone(),
-            payee_node_id: bill.payee.node_id().clone(),
-            endorsee_node_id: bill.endorsee.clone().map(|e| e.node_id()),
-            maturity_date: bill.maturity_date.clone(),
-            bill_keys: bill_keys.clone(),
-            timestamp,
-            signer_node_id: signer_public_data.node_id().clone(),
-            is_paid,
-            mode: BillValidationActionMode::Deep(BillAction::Mint(
-                mint_anon_participant.clone(),
-                bill.sum.clone(),
-            )),
-        }
-        .validate()?;
-
-        let requests_to_mint_for_bill_and_mint = self
-            .mint_store
-            .get_requests(&signer_public_data.node_id(), bill_id, mint_node_id)
-            .await?;
-        // If there are any active, or accepted (i.e. pending, accepted or offered) requests, we can't make another one
-        if requests_to_mint_for_bill_and_mint.iter().any(|rtm| {
-            matches!(
-                rtm.status,
-                MintRequestStatus::Pending
-                    | MintRequestStatus::Offered
-                    | MintRequestStatus::Accepted
-            )
-        }) {
-            return Err(Error::Validation(
-                ValidationError::RequestToMintForBillAndMintAlreadyActive,
-            ));
-        }
-
-        // Upload existing files for the mint
-        let file_urls_for_mint = self
-            .upload_bill_files_for_node_id(
-                bill_id,
-                &bill_keys.get_private_key(),
-                &mint_anon_participant.node_id().pub_key(),
-                &bill_keys,
-                &bill.files,
-            )
-            .await?;
-
-        // Send request to mint to mint
-        let bill_to_share = create_bill_to_share_with_external_party(
+        self.request_to_mint_with_optional_reissue(
             bill_id,
-            &blockchain,
-            &bill_keys,
-            &mint_anon_participant.node_id().pub_key(),
-            signer_keys,
-            &file_urls_for_mint,
-        )
-        .map_err(|e| Error::Protocol(e.into()))?;
-        let mint_request_id = self
-            .mint_client
-            .enquire_mint_quote(&mint_cfg.default_mint_url, bill_to_share, signer_keys)
-            .await?;
-
-        // Store request to mint
-        self.mint_store
-            .add_request(
-                &signer_public_data.node_id(),
-                bill_id,
-                mint_node_id,
-                &mint_request_id,
-                timestamp,
-            )
-            .await?;
-
-        // Calculate bill and persist it to cache
-        self.recalculate_and_persist_bill(
-            bill_id,
-            &blockchain,
-            &bill_keys,
-            &identity,
+            mint_node_id,
             signer_public_data,
             signer_keys,
             timestamp,
+            None,
         )
-        .await?;
+        .await
+    }
 
-        // Send notifications
-        if let Err(e) = self
-            .transport_service
-            .send_request_to_mint_event(
-                &signer_public_data.node_id(),
-                &mint_anon_participant,
-                &bill,
-            )
-            .await
-        {
-            error!("Couldn't send notifications for request to mint: {e}");
-        }
-
-        debug!("Executed request to mint with mint {mint_node_id} for bill {bill_id}");
-
-        Ok(())
+    async fn request_to_mint_reissue(
+        &self,
+        bill_id: &BillId,
+        mint_node_id: &NodeId,
+        signer_public_data: &BillParticipant,
+        signer_keys: &BcrKeys,
+        timestamp: Timestamp,
+        signed_reissue_permit_json: &str,
+    ) -> Result<()> {
+        self.request_to_mint_with_optional_reissue(
+            bill_id,
+            mint_node_id,
+            signer_public_data,
+            signer_keys,
+            timestamp,
+            Some(signed_reissue_permit_json),
+        )
+        .await
     }
 
     async fn get_mint_state(

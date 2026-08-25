@@ -197,6 +197,17 @@ pub trait BillServiceApi: ServiceTraitBounds {
         timestamp: Timestamp,
     ) -> Result<()>;
 
+    /// replace a terminal mint quote after AI Credit returned signed reviewed-correction authority
+    async fn request_to_mint_reissue(
+        &self,
+        bill_id: &BillId,
+        mint_node_id: &NodeId,
+        signer_public_data: &BillParticipant,
+        signer_keys: &BcrKeys,
+        timestamp: Timestamp,
+        signed_reissue_permit_json: &str,
+    ) -> Result<()>;
+
     /// Returns the mint state for a given bill
     async fn get_mint_state(
         &self,

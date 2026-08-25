@@ -428,6 +428,13 @@ mod test_utils {
                 bill_to_share: BillToShareWithExternalParty,
                 requester_keys: &BcrKeys,
             ) -> bcr_ebill_api::external::mint::Result<uuid::Uuid>;
+            async fn enquire_mint_quote_reissue(
+                &self,
+                mint_url: &url::Url,
+                bill_to_share: BillToShareWithExternalParty,
+                requester_keys: &BcrKeys,
+                signed_reissue_permit_json: &str,
+            ) -> bcr_ebill_api::external::mint::Result<uuid::Uuid>;
             async fn lookup_quote_for_mint(
                 &self,
                 mint_url: &url::Url,

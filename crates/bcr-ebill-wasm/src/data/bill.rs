@@ -72,6 +72,16 @@ pub struct RequestToMintBitcreditBillPayload {
     pub bill_id: BillId,
 }
 
+#[derive(Tsify, Debug, Deserialize, Clone)]
+#[tsify(from_wasm_abi)]
+pub struct RequestToMintBitcreditBillReissuePayload {
+    pub mint_node: String,
+    #[tsify(type = "string")]
+    pub bill_id: BillId,
+    /// JSON returned by AI Credit after it durably signed the reviewed correction authority.
+    pub signed_reissue_permit_json: String,
+}
+
 #[derive(Tsify, Debug, Clone, Deserialize)]
 pub struct OfferToSellBitcreditBillPayload {
     #[tsify(type = "string")]

@@ -69,3 +69,4 @@ surrealdb = { version = "2.3", default-features = false }
 strum = { version = "0.28", features = ["derive"] }
 url = { version = "2.5" }
 mockito = "1.7"
+unicode-normalization = "0.1"

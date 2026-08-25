@@ -57,7 +57,7 @@ use mockall::predicate::{always, eq, function};
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}},
     time::Duration,
 };
 use test_utils::{
@@ -6967,6 +6967,366 @@ async fn req_to_mint_baseline() {
         )
         .await;
     assert!(res.is_ok());
+}
+
+fn signed_quote_reissue_permit_json() -> String {
+    serde_json::json!({
+        "permit": {
+            "schemaVersion": "credit-quote-reissue-permit-v1",
+            "keyId": "ai-credit-test-key-v1",
+            "mintId": "mint-test-1",
+            "previousMintQuoteId": "11111111-1111-4111-8111-111111111111",
+            "reissuedMintQuoteId": "22222222-2222-4222-8222-222222222222",
+            "creditProgramVersion": "guatemala-v1",
+            "creditProgramDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "caseId": "case-1",
+            "billId": bill_id_test().to_string(),
+            "billStateDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "holderRef": node_id_test().to_string(),
+            "reviewRequestId": "33333333-3333-4333-8333-333333333333",
+            "contestedDecisionResultDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "correctedSubmissionDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "issuedAt": "2026-08-24T00:00:00.000Z",
+            "expiresAt": "2026-08-25T00:00:00.000Z",
+            "nonce": "44444444-4444-4444-8444-444444444444",
+            "action": "reissue_denied_quote_after_reviewed_correction",
+            "synthetic": true
+        },
+        "permitDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "signatureAlgorithm": "Ed25519",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    })
+    .to_string()
+}
+
+#[tokio::test]
+async fn req_to_mint_reissue_retries_same_quote_after_local_persist_failure() {
+    init_test_cfg();
+    let mut ctx = get_ctx();
+    let identity = get_baseline_identity();
+    let mut bill = get_baseline_bill(&bill_id_test());
+    bill.payee = BillParticipant::Ident(bill_identified_participant_only_node_id(
+        identity.identity.node_id.clone(),
+    ));
+    ctx.bill_store
+        .expect_save_bill_to_cache()
+        .returning(|_, _, _| Ok(()));
+    ctx.bill_blockchain_store
+        .expect_get_chain()
+        .returning(move |_| {
+            let mut chain = get_genesis_chain(Some(bill.clone()));
+            chain.try_add_block(accept_block(&bill.id, chain.get_latest_block()));
+            Ok(chain)
+        });
+    ctx.mint_store
+        .expect_get_requests()
+        .returning(|_, _, _| Ok(vec![]));
+    ctx.mint_client
+        .expect_enquire_mint_quote_reissue()
+        .times(2)
+        .returning(|_, _, _, _| {
+            Ok(Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap())
+        });
+    let persist_attempts = Arc::new(AtomicUsize::new(0));
+    ctx.mint_store.expect_add_request().times(2).returning({
+        let persist_attempts = persist_attempts.clone();
+        move |_, _, _, quote_id, _| {
+            assert_eq!(
+                *quote_id,
+                Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap()
+            );
+            if persist_attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                Err(bcr_ebill_persistence::Error::Io(std::io::Error::other(
+                    "simulated local persistence failure after the Mint accepted the permit",
+                )))
+            } else {
+                Ok(())
+            }
+        }
+    });
+    ctx.transport_service
+        .expect_send_request_to_mint_event()
+        .once()
+        .returning(|_, _, _| Ok(()));
+    ctx.transport_service.expect_on_contact_transport(|t| {
+        t.expect_resolve_contact().times(2).returning(|_| Ok(None));
+    });
+
+    let service = get_service(ctx);
+    let participant =
+        BillParticipant::Ident(BillIdentParticipant::new(identity.identity.clone()).unwrap());
+    let permit = signed_quote_reissue_permit_json();
+
+    assert!(
+        service
+            .request_to_mint_reissue(
+                &bill_id_test(),
+                &node_id_test(),
+                &participant,
+                &identity.key_pair,
+                test_ts(),
+                &permit,
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        service
+            .request_to_mint_reissue(
+                &bill_id_test(),
+                &node_id_test(),
+                &participant,
+                &identity.key_pair,
+                test_ts(),
+                &permit,
+            )
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn req_to_mint_reissue_accepts_mint_authenticated_replay_without_duplicate_store() {
+    init_test_cfg();
+    let mut ctx = get_ctx();
+    let identity = get_baseline_identity();
+    let mut bill = get_baseline_bill(&bill_id_test());
+    bill.payee = BillParticipant::Ident(bill_identified_participant_only_node_id(
+        identity.identity.node_id.clone(),
+    ));
+    ctx.bill_blockchain_store
+        .expect_get_chain()
+        .returning(move |_| {
+            let mut chain = get_genesis_chain(Some(bill.clone()));
+            chain.try_add_block(accept_block(&bill.id, chain.get_latest_block()));
+            Ok(chain)
+        });
+    ctx.mint_store
+        .expect_get_requests()
+        .returning(|requester, bill_id, mint_node_id| {
+            Ok(vec![MintRequest {
+                requester_node_id: requester.clone(),
+                bill_id: bill_id.clone(),
+                mint_node_id: mint_node_id.clone(),
+                mint_request_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap(),
+                timestamp: test_ts(),
+                status: MintRequestStatus::Pending,
+            }])
+        });
+    ctx.mint_client
+        .expect_enquire_mint_quote_reissue()
+        .once()
+        .returning(|_, _, _, _| {
+            Ok(Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap())
+        });
+    ctx.mint_store.expect_add_request().times(0);
+    ctx.bill_store
+        .expect_save_bill_to_cache()
+        .once()
+        .returning(|_, _, _| Ok(()));
+    ctx.transport_service
+        .expect_send_request_to_mint_event()
+        .once()
+        .returning(|_, _, _| Ok(()));
+    ctx.transport_service
+        .expect_on_contact_transport(|transport| {
+            transport.expect_resolve_contact().returning(|_| Ok(None));
+        });
+    let service = get_service(ctx);
+
+    let result = service
+        .request_to_mint_reissue(
+            &bill_id_test(),
+            &node_id_test(),
+            &BillParticipant::Ident(BillIdentParticipant::new(identity.identity.clone()).unwrap()),
+            &identity.key_pair,
+            test_ts(),
+            &signed_quote_reissue_permit_json(),
+        )
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn req_to_mint_reissue_replay_repairs_recalculation_after_local_request_was_saved() {
+    init_test_cfg();
+    let mut ctx = get_ctx();
+    let identity = get_baseline_identity();
+    let mut bill = get_baseline_bill(&bill_id_test());
+    bill.payee = BillParticipant::Ident(bill_identified_participant_only_node_id(
+        identity.identity.node_id.clone(),
+    ));
+    ctx.bill_blockchain_store
+        .expect_get_chain()
+        .times(2)
+        .returning(move |_| {
+            let mut chain = get_genesis_chain(Some(bill.clone()));
+            chain.try_add_block(accept_block(&bill.id, chain.get_latest_block()));
+            Ok(chain)
+        });
+
+    let request_reads = Arc::new(AtomicUsize::new(0));
+    ctx.mint_store.expect_get_requests().times(2).returning({
+        let request_reads = request_reads.clone();
+        move |requester, bill_id, mint_node_id| {
+            if request_reads.fetch_add(1, Ordering::SeqCst) == 0 {
+                Ok(vec![])
+            } else {
+                Ok(vec![MintRequest {
+                    requester_node_id: requester.clone(),
+                    bill_id: bill_id.clone(),
+                    mint_node_id: mint_node_id.clone(),
+                    mint_request_id: Uuid::parse_str("22222222-2222-4222-8222-222222222222")
+                        .unwrap(),
+                    timestamp: test_ts(),
+                    status: MintRequestStatus::Pending,
+                }])
+            }
+        }
+    });
+    ctx.mint_client
+        .expect_enquire_mint_quote_reissue()
+        .times(2)
+        .returning(|_, _, _, _| {
+            Ok(Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap())
+        });
+    ctx.mint_store
+        .expect_add_request()
+        .once()
+        .returning(|_, _, _, _, _| Ok(()));
+
+    let cache_writes = Arc::new(AtomicUsize::new(0));
+    ctx.bill_store
+        .expect_save_bill_to_cache()
+        .times(2)
+        .returning({
+            let cache_writes = cache_writes.clone();
+            move |_, _, _| {
+                if cache_writes.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(bcr_ebill_persistence::Error::Io(std::io::Error::other(
+                        "simulated cache failure after the mint request was saved",
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+        });
+    ctx.transport_service
+        .expect_send_request_to_mint_event()
+        .once()
+        .returning(|_, _, _| Ok(()));
+    ctx.transport_service
+        .expect_on_contact_transport(|transport| {
+            transport
+                .expect_resolve_contact()
+                .times(2)
+                .returning(|_| Ok(None));
+        });
+
+    let service = get_service(ctx);
+    let participant =
+        BillParticipant::Ident(BillIdentParticipant::new(identity.identity.clone()).unwrap());
+    let permit = signed_quote_reissue_permit_json();
+
+    assert!(
+        service
+            .request_to_mint_reissue(
+                &bill_id_test(),
+                &node_id_test(),
+                &participant,
+                &identity.key_pair,
+                test_ts(),
+                &permit,
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        service
+            .request_to_mint_reissue(
+                &bill_id_test(),
+                &node_id_test(),
+                &participant,
+                &identity.key_pair,
+                test_ts(),
+                &permit,
+            )
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn req_to_mint_reissue_rejects_mismatched_mint_quote_before_local_side_effects() {
+    init_test_cfg();
+    let mut ctx = get_ctx();
+    let identity = get_baseline_identity();
+    let mut bill = get_baseline_bill(&bill_id_test());
+    bill.payee = BillParticipant::Ident(bill_identified_participant_only_node_id(
+        identity.identity.node_id.clone(),
+    ));
+    ctx.bill_blockchain_store
+        .expect_get_chain()
+        .returning(move |_| {
+            let mut chain = get_genesis_chain(Some(bill.clone()));
+            chain.try_add_block(accept_block(&bill.id, chain.get_latest_block()));
+            Ok(chain)
+        });
+    ctx.mint_store
+        .expect_get_requests()
+        .returning(|_, _, _| Ok(vec![]));
+    ctx.mint_client
+        .expect_enquire_mint_quote_reissue()
+        .once()
+        .returning(|_, _, _, _| {
+            Ok(Uuid::parse_str("55555555-5555-4555-8555-555555555555").unwrap())
+        });
+    ctx.mint_store.expect_add_request().times(0);
+    ctx.bill_store.expect_save_bill_to_cache().times(0);
+    ctx.transport_service
+        .expect_send_request_to_mint_event()
+        .times(0);
+    ctx.transport_service
+        .expect_on_contact_transport(|transport| {
+            transport.expect_resolve_contact().returning(|_| Ok(None));
+        });
+    let service = get_service(ctx);
+
+    let result = service
+        .request_to_mint_reissue(
+            &bill_id_test(),
+            &node_id_test(),
+            &BillParticipant::Ident(BillIdentParticipant::new(identity.identity.clone()).unwrap()),
+            &identity.key_pair,
+            test_ts(),
+            &signed_quote_reissue_permit_json(),
+        )
+        .await;
+
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn req_to_mint_reissue_rejects_invalid_permit_before_side_effects() {
+    let mut ctx = get_ctx();
+    ctx.file_upload_client.expect_upload().times(0);
+    ctx.mint_client.expect_enquire_mint_quote_reissue().times(0);
+    let service = get_service(ctx);
+    let identity = get_baseline_identity();
+
+    let result = service
+        .request_to_mint_reissue(
+            &bill_id_test(),
+            &node_id_test(),
+            &BillParticipant::Ident(BillIdentParticipant::new(identity.identity.clone()).unwrap()),
+            &identity.key_pair,
+            test_ts(),
+            "{}",
+        )
+        .await;
+
+    assert!(result.is_err());
 }
 
 #[tokio::test]
