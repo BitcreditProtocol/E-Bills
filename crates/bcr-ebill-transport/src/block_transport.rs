@@ -12,6 +12,7 @@ use bcr_ebill_core::application::ServiceTraitBounds;
 use bcr_ebill_core::protocol::Sha256Hash;
 use bcr_ebill_core::protocol::blockchain::BlockchainType;
 use bcr_ebill_core::protocol::blockchain::bill::BillBlock;
+use bcr_ebill_core::protocol::blockchain::bill::participant::BillParticipant;
 use bcr_ebill_core::protocol::event::{
     BillChainEvent, CompanyChainEvent, EventEnvelope, IdentityChainEvent,
 };
@@ -267,7 +268,19 @@ impl BlockTransportServiceApi for BlockTransportService {
         let invites = events.generate_bill_invite_events();
         if !invites.is_empty() {
             for (recipient, event) in invites {
-                if let Some(identity) = self.nostr_transport.resolve_identity(&recipient).await {
+                let identity = self
+                    .nostr_transport
+                    .resolve_identity(&recipient)
+                    .await
+                    .or_else(|| match events.bill.endorsee.as_ref() {
+                        Some(endorsee @ BillParticipant::Anon(_))
+                            if endorsee.node_id() == recipient =>
+                        {
+                            Some(endorsee.clone())
+                        }
+                        _ => None,
+                    });
+                if let Some(identity) = identity {
                     let message: EventEnvelope = event.try_into()?;
                     if let Err(e) = node
                         .send_private_event(&events.sender(), &identity, message.clone())

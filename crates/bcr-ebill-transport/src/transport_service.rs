@@ -164,10 +164,23 @@ impl TransportServiceApi for TransportService {
     }
 
     async fn send_bill_is_endorsed_event(&self, event: &BillChainEvent) -> Result<()> {
-        let all_events = event.generate_messages(BillEventType::BillEndorsed);
+        let mut all_events = event.generate_messages(BillEventType::BillEndorsed);
         self.block_transport_service
             .send_bill_chain_events(event.clone())
             .await?;
+
+        if let Some(BillParticipant::Anon(endorsee)) = event.bill.endorsee.as_ref()
+            && let Some(endorsee_event) = all_events.remove(&endorsee.node_id)
+        {
+            self.nostr_transport
+                .send_private_event(
+                    &event.sender(),
+                    &endorsee.node_id,
+                    &endorsee.nostr_relays,
+                    endorsee_event.try_into()?,
+                )
+                .await?;
+        }
         self.nostr_transport
             .send_all_bill_events(&event.sender(), &all_events)
             .await?;
