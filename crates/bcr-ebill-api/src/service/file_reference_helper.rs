@@ -817,15 +817,13 @@ mod tests {
             .withf(move |url, _| url.as_str() == existing_server_clone.as_str())
             .returning(|_, _| Ok(vec![1, 2, 3, 4, 5]));
 
-        file_storage_client
-            .expect_upload()
-            .returning(|server, _| {
-                let hash = bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap();
-                Ok(UploadedBlob {
-                    hash,
-                    url: to_url(server, &hash.to_string()).unwrap(),
-                })
-            });
+        file_storage_client.expect_upload().returning(|server, _| {
+            let hash = bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap();
+            Ok(UploadedBlob {
+                hash,
+                url: to_url(server, &hash.to_string()).unwrap(),
+            })
+        });
 
         file_reference_store
             .expect_add_server_urls()

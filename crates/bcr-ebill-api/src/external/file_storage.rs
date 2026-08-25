@@ -110,7 +110,10 @@ fn sha256_hash(bytes: &[u8]) -> Result<Sha256HexHash> {
 fn validate_uploaded_blob_url(url: &Url, hash: &Sha256HexHash) -> Result<()> {
     let expected_path = hash.to_string();
     if !matches!(url.scheme(), "http" | "https")
-        || url.path_segments().and_then(|segments| segments.last()) != Some(expected_path.as_str())
+        || url
+            .path_segments()
+            .and_then(|mut segments| segments.next_back())
+            != Some(expected_path.as_str())
     {
         return Err(Error::InvalidRelayUrl.into());
     }

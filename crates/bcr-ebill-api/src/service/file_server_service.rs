@@ -519,10 +519,8 @@ mod tests {
             "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
         )
         .unwrap();
-        let source_url = url::Url::parse(&format!(
-            "https://public.example.com/blobs/{expected}"
-        ))
-        .unwrap();
+        let source_url =
+            url::Url::parse(&format!("https://public.example.com/blobs/{expected}")).unwrap();
 
         client
             .expect_upload()
