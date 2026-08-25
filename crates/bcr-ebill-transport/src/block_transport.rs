@@ -11,8 +11,8 @@ use bcr_ebill_api::service::transport_service::BlockTransportServiceApi;
 use bcr_ebill_core::application::ServiceTraitBounds;
 use bcr_ebill_core::protocol::Sha256Hash;
 use bcr_ebill_core::protocol::blockchain::BlockchainType;
-use bcr_ebill_core::protocol::blockchain::bill::BillBlock;
 use bcr_ebill_core::protocol::blockchain::bill::participant::BillParticipant;
+use bcr_ebill_core::protocol::blockchain::bill::{BillBlock, BitcreditBill};
 use bcr_ebill_core::protocol::event::{
     BillChainEvent, CompanyChainEvent, EventEnvelope, IdentityChainEvent,
 };
@@ -44,6 +44,19 @@ impl BlockTransportService {
             identity_chain_event_processor,
         }
     }
+}
+
+fn advertised_anonymous_participant(
+    bill: &BitcreditBill,
+    recipient: &NodeId,
+) -> Option<BillParticipant> {
+    [Some(&bill.payee), bill.endorsee.as_ref()]
+        .into_iter()
+        .flatten()
+        .find(|participant| {
+            matches!(participant, BillParticipant::Anon(_)) && participant.node_id() == *recipient
+        })
+        .cloned()
 }
 
 impl ServiceTraitBounds for BlockTransportService {}
@@ -272,14 +285,7 @@ impl BlockTransportServiceApi for BlockTransportService {
                     .nostr_transport
                     .resolve_identity(&recipient)
                     .await
-                    .or_else(|| match events.bill.endorsee.as_ref() {
-                        Some(endorsee @ BillParticipant::Anon(_))
-                            if endorsee.node_id() == recipient =>
-                        {
-                            Some(endorsee.clone())
-                        }
-                        _ => None,
-                    });
+                    .or_else(|| advertised_anonymous_participant(&events.bill, &recipient));
                 if let Some(identity) = identity {
                     let message: EventEnvelope = event.try_into()?;
                     if let Err(e) = node
@@ -386,10 +392,11 @@ mod tests {
     use crate::test_utils::{
         MockContactStore, MockNostrChainEventStore, MockNostrContactStore,
         MockNostrQueuedMessageStore, MockNotificationJsonTransport, bill_id_test,
-        get_genesis_chain, get_nostr_transport, get_test_company_chain_event,
+        empty_bitcredit_bill, get_genesis_chain, get_nostr_transport, get_test_company_chain_event,
         get_test_identity_chain_event, private_key_test,
     };
     use crate::transport::create_public_chain_event;
+    use bcr_ebill_core::protocol::blockchain::bill::participant::BillAnonParticipant;
     use bcr_ebill_core::protocol::blockchain::{Blockchain, BlockchainType};
     use bcr_ebill_core::protocol::crypto::BcrKeys;
     use bcr_ebill_core::protocol::event::{BillBlockEvent, Event};
@@ -444,6 +451,22 @@ mod tests {
 
     fn get_service(chain_event_store: MockNostrChainEventStore) -> BlockTransportService {
         get_service_with_transport(MockNotificationJsonTransport::new(), chain_event_store)
+    }
+
+    #[test]
+    fn invite_uses_advertised_relays_for_any_anonymous_new_holder() {
+        let mut bill = empty_bitcredit_bill();
+        let payee = BillParticipant::Anon(BillAnonParticipant {
+            node_id: bill.payee.node_id(),
+            nostr_relays: vec![url::Url::parse("wss://relay.example").unwrap()],
+        });
+        let recipient = payee.node_id();
+        bill.payee = payee.clone();
+
+        assert_eq!(
+            advertised_anonymous_participant(&bill, &recipient),
+            Some(payee)
+        );
     }
 
     #[tokio::test]
