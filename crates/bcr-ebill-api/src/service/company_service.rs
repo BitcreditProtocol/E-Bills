@@ -1932,7 +1932,10 @@ impl CompanyServiceApi for CompanyService {
 pub mod tests {
     use super::*;
     use crate::{
-        external::{email::MockEmailClientApi, file_storage::MockFileStorageClientApi},
+        external::{
+            email::MockEmailClientApi,
+            file_storage::{MockFileStorageClientApi, UploadedBlob, to_url},
+        },
         service::{
             contact_service::tests::{get_baseline_contact, get_baseline_nostr_contact},
             transport_service::MockTransportServiceApi,
@@ -1959,6 +1962,13 @@ pub mod tests {
     use bitcoin::hashes::sha256::Hash as Sha256HexHash;
     use mockall::predicate::eq;
     use std::{collections::HashMap, str::FromStr};
+
+    fn uploaded(server: &url::Url, hash: Sha256HexHash) -> UploadedBlob {
+        UploadedBlob {
+            hash,
+            url: to_url(server, &hash.to_string()).unwrap(),
+        }
+    }
 
     fn get_service(
         mock_storage: MockCompanyStoreApiMock,
@@ -2495,11 +2505,12 @@ pub mod tests {
         company_chain_store
             .expect_add_block()
             .returning(|_, _| Ok(()));
-        file_upload_client.expect_upload().returning(|_, _| {
-            Ok(bitcoin::hashes::sha256::Hash::from_str(
+        file_upload_client.expect_upload().returning(|server, _| {
+            let hash = bitcoin::hashes::sha256::Hash::from_str(
                 "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
             )
-            .unwrap())
+            .unwrap();
+            Ok(uploaded(server, hash))
         });
         storage.expect_save_key_pair().returning(|_, _| Ok(()));
         storage.expect_exists().returning(|_| false);
@@ -2786,11 +2797,12 @@ pub mod tests {
             .returning(|_| Ok(get_baseline_company_data().1.1));
         storage.expect_exists().returning(|_| true);
         storage.expect_update().returning(|_, _| Ok(()));
-        file_upload_client.expect_upload().returning(|_, _| {
-            Ok(bitcoin::hashes::sha256::Hash::from_str(
+        file_upload_client.expect_upload().returning(|server, _| {
+            let hash = bitcoin::hashes::sha256::Hash::from_str(
                 "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
             )
-            .unwrap())
+            .unwrap();
+            Ok(uploaded(server, hash))
         });
         identity_store.expect_get_full().returning(move || {
             let identity = empty_other_identity();
@@ -4130,11 +4142,12 @@ pub mod tests {
         file_upload_client
             .expect_upload()
             .times(1)
-            .returning(|_, _| {
-                Ok(bitcoin::hashes::sha256::Hash::from_str(
+            .returning(|server, _| {
+                let hash = bitcoin::hashes::sha256::Hash::from_str(
                     "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
                 )
-                .unwrap())
+                .unwrap();
+                Ok(uploaded(server, hash))
             });
 
         file_upload_client

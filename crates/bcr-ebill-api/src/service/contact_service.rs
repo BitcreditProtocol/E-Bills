@@ -930,7 +930,7 @@ impl ContactServiceApi for ContactService {
 pub mod tests {
     use super::*;
     use crate::{
-        external::file_storage::MockFileStorageClientApi,
+        external::file_storage::{MockFileStorageClientApi, UploadedBlob, to_url},
         get_config,
         service::{
             Error, bill_service::test_utils::get_baseline_identity,
@@ -1325,11 +1325,15 @@ pub mod tests {
             .expect_read_temp_upload_file()
             .returning(|_| Ok((Name::new("avatar.png").unwrap(), vec![1, 2, 3])));
 
-        file_upload_client.expect_upload().returning(|_, _| {
-            Ok(bitcoin::hashes::sha256::Hash::from_str(
+        file_upload_client.expect_upload().returning(|server, _| {
+            let hash = bitcoin::hashes::sha256::Hash::from_str(
                 "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
             )
-            .unwrap())
+            .unwrap();
+            Ok(UploadedBlob {
+                hash,
+                url: to_url(server, &hash.to_string()).unwrap(),
+            })
         });
 
         file_reference_store.expect_get().returning(|_| Ok(None));

@@ -45,8 +45,8 @@ use mockall::automock;
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait FileStorageClientApi: ServiceTraitBounds {
-    /// Upload the given bytes, checking and returning the nostr_hash
-    async fn upload(&self, relay_url: &url::Url, bytes: Vec<u8>) -> Result<Sha256HexHash>;
+    /// Upload the given bytes, checking the hash and retaining the server-advertised blob URL.
+    async fn upload(&self, relay_url: &url::Url, bytes: Vec<u8>) -> Result<UploadedBlob>;
     async fn mirror(
         &self,
         relay_url: &url::Url,
@@ -131,7 +131,7 @@ struct MirrorRequest<'a> {
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl FileStorageClientApi for FileStorageClient {
-    async fn upload(&self, relay_url: &url::Url, bytes: Vec<u8>) -> Result<Sha256HexHash> {
+    async fn upload(&self, relay_url: &url::Url, bytes: Vec<u8>) -> Result<UploadedBlob> {
         let hash = sha256_hash(&bytes)?;
 
         // Make upload request
@@ -144,14 +144,15 @@ impl FileStorageClientApi for FileStorageClient {
             .error_for_status()?
             .json()
             .await?;
-        let nostr_hash = resp.sha256;
-
         // Check hash
-        if hash != nostr_hash {
+        if hash != resp.sha256 {
             return Err(Error::InvalidHash.into());
         }
 
-        Ok(nostr_hash)
+        Ok(UploadedBlob {
+            hash: resp.sha256,
+            url: resp.url,
+        })
     }
 
     async fn mirror(
@@ -213,6 +214,13 @@ impl FileStorageClientApi for FileStorageClient {
 #[derive(Debug, Clone, Deserialize)]
 pub struct BlobDescriptorReply {
     sha256: Sha256HexHash,
+    url: Url,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadedBlob {
+    pub hash: Sha256HexHash,
+    pub url: Url,
 }
 
 #[cfg(test)]

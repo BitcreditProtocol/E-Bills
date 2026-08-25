@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    external::mint::QuoteStatusReply,
+    external::{file_storage::UploadedBlob, mint::QuoteStatusReply},
     service::{
         bill_service::test_utils::{MockBillContext, safe_deadline_ts},
         company_service::tests::{
@@ -66,6 +66,13 @@ use test_utils::{
     reject_buy_block, reject_recourse_block, reject_to_pay_block, request_to_accept_block,
     request_to_pay_block, request_to_recourse_block, sell_block,
 };
+
+fn uploaded_at(hash: Sha256HexHash, url: &str) -> UploadedBlob {
+    UploadedBlob {
+        hash,
+        url: url::Url::parse(url).unwrap(),
+    }
+}
 
 #[tokio::test]
 async fn get_bill_balances_baseline() {
@@ -385,10 +392,11 @@ async fn issue_bill_baseline() {
         .expect_remove_temp_upload_folder()
         .returning(|_| Ok(()));
     ctx.file_upload_client.expect_upload().returning(|_, _| {
-        Ok(bitcoin::hashes::sha256::Hash::from_str(
+        let hash = bitcoin::hashes::sha256::Hash::from_str(
             "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
         )
-        .unwrap())
+        .unwrap();
+        Ok(uploaded_at(hash, &format!("https://blossom.example/{hash}")))
     });
     ctx.bill_store.expect_save_keys().returning(|_, _| Ok(()));
     ctx.bill_store
@@ -460,10 +468,11 @@ async fn issue_bill_baseline_anon() {
         .expect_remove_temp_upload_folder()
         .returning(|_| Ok(()));
     ctx.file_upload_client.expect_upload().returning(|_, _| {
-        Ok(bitcoin::hashes::sha256::Hash::from_str(
+        let hash = bitcoin::hashes::sha256::Hash::from_str(
             "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
         )
-        .unwrap())
+        .unwrap();
+        Ok(uploaded_at(hash, &format!("https://blossom.example/{hash}")))
     });
     ctx.bill_store.expect_save_keys().returning(|_, _| Ok(()));
     ctx.bill_store
@@ -613,10 +622,11 @@ async fn issue_bill_as_company() {
         .expect_remove_temp_upload_folder()
         .returning(|_| Ok(()));
     ctx.file_upload_client.expect_upload().returning(|_, _| {
-        Ok(bitcoin::hashes::sha256::Hash::from_str(
+        let hash = bitcoin::hashes::sha256::Hash::from_str(
             "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
         )
-        .unwrap())
+        .unwrap();
+        Ok(uploaded_at(hash, &format!("https://blossom.example/{hash}")))
     });
     ctx.bill_store.expect_save_keys().returning(|_, _| Ok(()));
     ctx.bill_store
@@ -739,6 +749,10 @@ async fn upload_bill_files_for_node_id_reencrypts_for_receiver_key() {
     let expected_hash =
         Sha256HexHash::from_str("d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa")
             .unwrap();
+    let advertised_url = url::Url::parse(&format!(
+        "https://relay-public.example/blobs/{expected_hash}"
+    ))
+    .unwrap();
 
     ctx.identity_store
         .expect_get_current_identity()
@@ -758,14 +772,20 @@ async fn upload_bill_files_for_node_id_reencrypts_for_receiver_key() {
     let receiver_keys_for_signing = receiver_keys_for_upload.clone();
     ctx.file_upload_client
         .expect_upload()
-        .returning(move |_, bytes| {
-            let decrypted = bcr_ebill_core::protocol::crypto::decrypt_ecies(
-                &bytes,
-                &receiver_keys_for_upload.get_private_key(),
-            )
-            .unwrap();
-            assert_eq!(decrypted, plaintext_clone);
-            Ok(expected_hash)
+        .returning({
+            let advertised_url = advertised_url.clone();
+            move |_, bytes| {
+                let decrypted = bcr_ebill_core::protocol::crypto::decrypt_ecies(
+                    &bytes,
+                    &receiver_keys_for_upload.get_private_key(),
+                )
+                .unwrap();
+                assert_eq!(decrypted, plaintext_clone);
+                Ok(UploadedBlob {
+                    hash: expected_hash,
+                    url: advertised_url.clone(),
+                })
+            }
         })
         .once();
 
@@ -788,12 +808,7 @@ async fn upload_bill_files_for_node_id_reencrypts_for_receiver_key() {
         .await
         .unwrap();
 
-    assert_eq!(urls.len(), 1);
-    assert!(
-        urls[0]
-            .as_str()
-            .ends_with(expected_hash.to_string().as_str())
-    );
+    assert_eq!(urls, vec![advertised_url]);
 }
 
 #[tokio::test]
