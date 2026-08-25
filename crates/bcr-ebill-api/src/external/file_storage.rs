@@ -107,6 +107,16 @@ fn sha256_hash(bytes: &[u8]) -> Result<Sha256HexHash> {
     Ok(sha256::Hash::from_engine(hash_engine))
 }
 
+fn validate_uploaded_blob_url(url: &Url, hash: &Sha256HexHash) -> Result<()> {
+    let expected_path = hash.to_string();
+    if !matches!(url.scheme(), "http" | "https")
+        || url.path_segments().and_then(|segments| segments.last()) != Some(expected_path.as_str())
+    {
+        return Err(Error::InvalidRelayUrl.into());
+    }
+    Ok(())
+}
+
 fn blossom_auth_header(signer: &BcrKeys, blob_hash: &Sha256HexHash) -> Result<String> {
     let expiration = Timestamp::from_secs(Timestamp::now().as_secs() + 60);
     let event = EventBuilder::new(Kind::Custom(24242), "")
@@ -148,6 +158,7 @@ impl FileStorageClientApi for FileStorageClient {
         if hash != resp.sha256 {
             return Err(Error::InvalidHash.into());
         }
+        validate_uploaded_blob_url(&resp.url, &resp.sha256)?;
 
         Ok(UploadedBlob {
             hash: resp.sha256,
@@ -284,6 +295,32 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&request).unwrap(),
             r#"{"url":"https://example.com/blob"}"#
+        );
+    }
+
+    #[test]
+    fn advertised_blob_url_must_be_http_and_name_the_returned_hash() {
+        let hash = Sha256HexHash::from_str(
+            "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
+        )
+        .unwrap();
+
+        assert!(
+            validate_uploaded_blob_url(
+                &Url::parse(&format!("https://cdn.example.com/blobs/{hash}")).unwrap(),
+                &hash,
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_uploaded_blob_url(&Url::parse("file:///tmp/blob").unwrap(), &hash).is_err()
+        );
+        assert!(
+            validate_uploaded_blob_url(
+                &Url::parse("https://cdn.example.com/blobs/wrong").unwrap(),
+                &hash,
+            )
+            .is_err()
         );
     }
 }
