@@ -136,18 +136,24 @@ impl BitcoinClient {
     }
 
     fn build_api_url(&self, base_url: &url::Url, path: &str) -> String {
-        match self.network {
-            Network::Bitcoin => format!("{}api{path}", base_url),
-            Network::Regtest => format!("{}regtest/api{path}", base_url),
-            _ => format!("{}testnet/api{path}", base_url),
-        }
+        format!(
+            "{}{prefix}api{path}",
+            base_url,
+            prefix = self.esplora_prefix()
+        )
     }
 
     fn build_link_url(&self, base_url: &url::Url, path: &str) -> String {
+        format!("{}{prefix}{path}", base_url, prefix = self.esplora_prefix())
+    }
+
+    fn esplora_prefix(&self) -> &'static str {
         match self.network {
-            Network::Bitcoin => format!("{}{path}", base_url),
-            Network::Regtest => format!("{}regtest/{path}", base_url),
-            _ => format!("{}testnet/{path}", base_url),
+            Network::Bitcoin => "",
+            Network::Testnet => "testnet/",
+            Network::Testnet4 => "testnet4/",
+            Network::Signet => "signet/",
+            Network::Regtest => "regtest/",
         }
     }
 
@@ -815,6 +821,46 @@ pub mod tests {
     use bitcoin::Network;
     use mockito;
     use serde_json::json;
+
+    #[test]
+    fn builds_network_specific_esplora_urls() {
+        let base_url = url::Url::parse("https://mempool.example/").unwrap();
+        let cases = [
+            (Network::Bitcoin, "api/blocks/tip/height", "address/example"),
+            (
+                Network::Testnet,
+                "testnet/api/blocks/tip/height",
+                "testnet/address/example",
+            ),
+            (
+                Network::Testnet4,
+                "testnet4/api/blocks/tip/height",
+                "testnet4/address/example",
+            ),
+            (
+                Network::Signet,
+                "signet/api/blocks/tip/height",
+                "signet/address/example",
+            ),
+            (
+                Network::Regtest,
+                "regtest/api/blocks/tip/height",
+                "regtest/address/example",
+            ),
+        ];
+
+        for (network, api_path, link_path) in cases {
+            let client = BitcoinClient::with_urls(vec![base_url.clone()], network);
+            assert_eq!(
+                client.build_api_url(&base_url, "/blocks/tip/height"),
+                format!("https://mempool.example/{api_path}")
+            );
+            assert_eq!(
+                client.build_link_url(&base_url, "address/example"),
+                format!("https://mempool.example/{link_path}")
+            );
+        }
+    }
 
     #[tokio::test]
     async fn test_fallback_on_server_error() {

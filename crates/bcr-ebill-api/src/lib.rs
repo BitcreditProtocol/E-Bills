@@ -54,20 +54,56 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
 
 impl Config {
     pub fn bitcoin_network(&self) -> Network {
-        match self.bitcoin_network.as_str() {
-            "mainnet" => Network::Bitcoin,
-            "bitcoin" => Network::Bitcoin,
-            "testnet" => Network::Testnet,
-            "testnet4" => Network::Testnet4,
-            "regtest" => Network::Regtest,
-            _ => {
-                log::warn!(
-                    "Triggered fallback for config bitcoin network, network is set to {}, but defaulted to Testnet",
-                    self.bitcoin_network
-                );
-                Network::Testnet
-            }
+        self.try_bitcoin_network()
+            .expect("bitcoin network must be validated during API initialization")
+    }
+
+    fn try_bitcoin_network(&self) -> Result<Network> {
+        Self::try_bitcoin_network_value(&self.bitcoin_network)
+    }
+
+    fn try_bitcoin_network_value(configured: &str) -> Result<Network> {
+        match configured {
+            "mainnet" | "bitcoin" => Ok(Network::Bitcoin),
+            "testnet" => Ok(Network::Testnet),
+            "testnet4" => Ok(Network::Testnet4),
+            "regtest" => Ok(Network::Regtest),
+            unsupported => Err(anyhow!(
+                "Unsupported bitcoin network '{unsupported}'; expected bitcoin, mainnet, testnet, testnet4, or regtest"
+            )),
         }
+    }
+}
+
+#[cfg(test)]
+mod config_network_tests {
+    use super::Config;
+    use bitcoin::Network;
+
+    #[test]
+    fn parses_every_supported_bitcoin_network_explicitly() {
+        let cases = [
+            ("bitcoin", Network::Bitcoin),
+            ("mainnet", Network::Bitcoin),
+            ("testnet", Network::Testnet),
+            ("testnet4", Network::Testnet4),
+            ("regtest", Network::Regtest),
+        ];
+
+        for (configured, expected) in cases {
+            let parsed = Config::try_bitcoin_network_value(configured).unwrap();
+            assert_eq!(parsed, expected);
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_bitcoin_network_instead_of_falling_back() {
+        let error = Config::try_bitcoin_network_value("testnett").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Unsupported bitcoin network 'testnett'")
+        );
     }
 }
 
@@ -147,6 +183,7 @@ pub fn init(conf: Config) -> Result<()> {
     if conf.esplora_base_urls.is_empty() {
         return Err(anyhow!("esplora_base_urls must contain at least one URL"));
     }
+    conf.try_bitcoin_network()?;
 
     CONFIG
         .set(conf)
