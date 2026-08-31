@@ -1,9 +1,42 @@
 use crate::protocol::{DateTimeUtc, Timestamp};
 use bcr_common::core::{BillId, NodeId};
+use bcr_common::wire::quotes::ApplicantActionProjection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt::Display;
 use uuid::Uuid;
+
+pub const QUOTE_APPLICANT_ACTION_NOTIFICATION_SCHEMA_VERSION: &str =
+    "quote-applicant-action-notification-v1";
+
+/// Typed payload persisted on the local Bill notification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct QuoteApplicantActionNotificationPayload {
+    pub schema_version: String,
+    pub bill_id: BillId,
+    pub mint_request_id: Uuid,
+    pub applicant_action: ApplicantActionProjection,
+}
+
+impl QuoteApplicantActionNotificationPayload {
+    pub fn new(
+        bill_id: &BillId,
+        mint_request_id: Uuid,
+        applicant_action: ApplicantActionProjection,
+    ) -> Self {
+        Self {
+            schema_version: QUOTE_APPLICANT_ACTION_NOTIFICATION_SCHEMA_VERSION.to_owned(),
+            bill_id: bill_id.to_owned(),
+            mint_request_id,
+            applicant_action,
+        }
+    }
+
+    pub fn is_current_schema(&self) -> bool {
+        self.schema_version == QUOTE_APPLICANT_ACTION_NOTIFICATION_SCHEMA_VERSION
+    }
+}
 
 /// A notification as it will be delivered to the UI.
 ///

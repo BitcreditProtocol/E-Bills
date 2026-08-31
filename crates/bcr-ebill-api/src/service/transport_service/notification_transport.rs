@@ -1,6 +1,7 @@
 use super::Result;
 use async_trait::async_trait;
 use bcr_common::core::{BillId, NodeId};
+use bcr_common::wire::quotes::ApplicantActionProjection;
 use bcr_ebill_core::{
     application::ServiceTraitBounds,
     application::notification::{Notification, NotificationLevel},
@@ -52,6 +53,16 @@ pub trait NotificationTransportServiceApi: ServiceTraitBounds {
         event_type: BillEventType,
         action_type: Option<ActionType>,
         sum: Option<Sum>,
+    ) -> Result<()>;
+
+    /// Reconciles the mint's authoritative applicant-action projection into local persistence.
+    /// This does not publish a bill-chain or Nostr event.
+    async fn reconcile_quote_applicant_action_notification(
+        &self,
+        node_id: &NodeId,
+        bill_id: &BillId,
+        mint_request_id: uuid::Uuid,
+        applicant_action: Option<ApplicantActionProjection>,
     ) -> Result<()>;
 
     /// Creates a general (non-bill, non-company) notification for the given node.

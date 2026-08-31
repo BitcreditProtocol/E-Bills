@@ -1,4 +1,5 @@
 use bcr_common::core::{BillId, NodeId};
+use bcr_common::wire::quotes::ApplicantActionProjection;
 use bcr_ebill_api::external::email::EmailClientApi;
 use bcr_ebill_api::service::contact_service::ContactServiceApi;
 use bcr_ebill_api::service::transport_service::NostrConfig;
@@ -569,6 +570,13 @@ mockall::mock! {
             event_type: BillEventType,
             action_type: Option<ActionType>,
             sum: Option<Sum>,
+        ) -> Result<()>;
+        async fn reconcile_quote_applicant_action_notification(
+            &self,
+            node_id: &NodeId,
+            bill_id: &BillId,
+            mint_request_id: Uuid,
+            applicant_action: Option<ApplicantActionProjection>,
         ) -> Result<()>;
         async fn create_general_notification(
             &self,

@@ -8,7 +8,10 @@ use bcr_common::core::{BillId, keys::to_fee_and_amounts};
 use bcr_common::ecash::{self, ProofsMethods};
 use bcr_common::wallet;
 use bcr_common::wire::borsh::{deserialize_from_str, serialize_as_str};
-use bcr_common::wire::quotes::{EnquireReply, ResolveOffer, SharedBill, StatusReply};
+use bcr_common::wire::quotes::{
+    ApplicantActionProjection, EnquireReply, QuoteStatusReply as WireQuoteStatusReply,
+    ResolveOffer, SharedBill, StatusReply,
+};
 use bcr_ebill_core::protocol::{BitcoinAddress, BlockId, Sha256Hash, Sum};
 use bcr_ebill_core::{
     application::ServiceTraitBounds, protocol::DateTimeUtc, protocol::SecretKey,
@@ -144,7 +147,7 @@ pub trait MintClientApi: ServiceTraitBounds {
         &self,
         mint_url: &url::Url,
         quote_id: &Uuid,
-    ) -> Result<QuoteStatusReply>;
+    ) -> Result<MintQuoteLookupReply>;
     /// Resolve quote from mint
     async fn resolve_quote_for_mint(
         &self,
@@ -709,7 +712,7 @@ impl MintClientApi for MintClient {
         &self,
         mint_url: &url::Url,
         quote_id: &Uuid,
-    ) -> Result<QuoteStatusReply> {
+    ) -> Result<MintQuoteLookupReply> {
         let reply = self
             .client(mint_url)?
             .lookup(quote_id.to_owned())
@@ -718,7 +721,7 @@ impl MintClientApi for MintClient {
                 log::error!("Error looking up request on mint {mint_url}: {e}");
                 Error::QuoteClient
             })?;
-        Ok(reply.into())
+        MintQuoteLookupReply::try_from(reply)
     }
 
     async fn resolve_quote_for_mint(
@@ -896,6 +899,39 @@ pub enum QuoteStatusReply {
     FailedEbillValidation {
         keyset_id: cdk02::Id,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct MintQuoteLookupReply {
+    pub quote: QuoteStatusReply,
+    pub applicant_action: Option<ApplicantActionProjection>,
+}
+
+impl From<QuoteStatusReply> for MintQuoteLookupReply {
+    fn from(quote: QuoteStatusReply) -> Self {
+        Self {
+            quote,
+            applicant_action: None,
+        }
+    }
+}
+
+impl TryFrom<WireQuoteStatusReply> for MintQuoteLookupReply {
+    type Error = super::Error;
+
+    fn try_from(value: WireQuoteStatusReply) -> std::result::Result<Self, Self::Error> {
+        if value
+            .applicant_action
+            .as_ref()
+            .is_some_and(|action| !is_sha256_digest(&action.revision_digest))
+        {
+            return Err(Error::QuoteClient.into());
+        }
+        Ok(Self {
+            quote: value.quote.into(),
+            applicant_action: value.applicant_action,
+        })
+    }
 }
 
 impl From<StatusReply> for QuoteStatusReply {

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bcr_common::core::{BillId, NodeId};
+use bcr_common::wire::quotes::ApplicantActionProjection;
 
 use bcr_ebill_api::external::email::EmailClientApi;
 use bcr_ebill_api::service::transport_service::NotificationTransportServiceApi;
@@ -11,7 +12,7 @@ use bcr_ebill_api::service::transport_service::{Error, Result};
 use bcr_ebill_api::util::{validate_bill_id_network, validate_node_id_network};
 use bcr_ebill_core::application::ServiceTraitBounds;
 use bcr_ebill_core::application::notification::{
-    Notification, NotificationLevel, NotificationType,
+    Notification, NotificationLevel, NotificationType, QuoteApplicantActionNotificationPayload,
 };
 use bcr_ebill_core::{
     protocol::Sum,
@@ -23,6 +24,8 @@ use bcr_ebill_persistence::notification::{EmailNotificationStoreApi, Notificatio
 use log::{debug, error};
 
 use crate::PushApi;
+
+const QUOTE_APPLICANT_ACTION_NOTIFICATION_DESCRIPTION: &str = "quote_applicant_action";
 
 pub struct NotificationTransportService {
     notification_store: Arc<dyn NotificationStoreApi>,
@@ -87,6 +90,7 @@ impl NotificationTransportService {
                 node_id,
             )
             .await
+            && quote_applicant_action_payload(&currently_active).is_none()
         {
             let _ = self
                 .notification_store
@@ -110,6 +114,34 @@ impl NotificationTransportService {
 
         Ok(())
     }
+
+    async fn mark_done_and_push(&self, mut notification: Notification) -> Result<()> {
+        self.notification_store
+            .mark_as_done(&notification.id)
+            .await
+            .map_err(|e| {
+                error!("Failed to mark quote applicant-action notification as done: {e}");
+                Error::Persistence(
+                    "Failed to mark quote applicant-action notification as done".to_string(),
+                )
+            })?;
+        notification.active = false;
+        if let Ok(notification_value) = serde_json::to_value(notification) {
+            self.push_service.send(notification_value).await;
+        }
+        Ok(())
+    }
+}
+
+fn quote_applicant_action_payload(
+    notification: &Notification,
+) -> Option<QuoteApplicantActionNotificationPayload> {
+    if notification.notification_type != NotificationType::Bill {
+        return None;
+    }
+    let payload: QuoteApplicantActionNotificationPayload =
+        serde_json::from_value(notification.payload.clone()?).ok()?;
+    payload.is_current_schema().then_some(payload)
 }
 
 impl ServiceTraitBounds for NotificationTransportService {}
@@ -190,6 +222,91 @@ impl NotificationTransportServiceApi for NotificationTransportService {
     ) -> Result<()> {
         self.create_bill_notification(node_id, bill_id, event_type, action_type, sum)
             .await
+    }
+
+    async fn reconcile_quote_applicant_action_notification(
+        &self,
+        node_id: &NodeId,
+        bill_id: &BillId,
+        mint_request_id: uuid::Uuid,
+        applicant_action: Option<ApplicantActionProjection>,
+    ) -> Result<()> {
+        validate_node_id_network(node_id)?;
+        validate_bill_id_network(bill_id)?;
+        let notifications = self
+            .notification_store
+            .list(NotificationFilter {
+                reference_id: Some(bill_id.to_string()),
+                notification_type: Some(NotificationType::Bill.to_string()),
+                node_ids: vec![node_id.to_owned()],
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| {
+                error!("Failed to load quote applicant-action notifications: {e}");
+                Error::Persistence(
+                    "Failed to load quote applicant-action notifications".to_string(),
+                )
+            })?;
+        let action_notifications = notifications
+            .into_iter()
+            .filter_map(|notification| {
+                quote_applicant_action_payload(&notification).map(|payload| (notification, payload))
+            })
+            .collect::<Vec<_>>();
+
+        if let Some(action) = applicant_action {
+            let revision_already_seen = action_notifications.iter().any(|(_, payload)| {
+                payload.mint_request_id == mint_request_id && payload.applicant_action == action
+            });
+
+            for (notification, payload) in action_notifications {
+                if notification.active
+                    && payload.mint_request_id == mint_request_id
+                    && payload.applicant_action != action
+                {
+                    self.mark_done_and_push(notification).await?;
+                }
+            }
+
+            // A dismissed revision stays dismissed, but it must not leave an older revision active.
+            if revision_already_seen {
+                return Ok(());
+            }
+
+            let payload =
+                QuoteApplicantActionNotificationPayload::new(bill_id, mint_request_id, action);
+            let notification = Notification::new_bill_notification(
+                bill_id,
+                node_id,
+                QUOTE_APPLICANT_ACTION_NOTIFICATION_DESCRIPTION,
+                Some(serde_json::to_value(payload).map_err(|e| {
+                    Error::Message(format!(
+                        "Failed to serialize quote applicant-action notification: {e}"
+                    ))
+                })?),
+                NotificationLevel::ActionRequired,
+            );
+            self.notification_store
+                .add(notification.clone())
+                .await
+                .map_err(|e| {
+                    error!("Failed to save quote applicant-action notification: {e}");
+                    Error::Persistence(
+                        "Failed to save quote applicant-action notification".to_string(),
+                    )
+                })?;
+            if let Ok(notification_value) = serde_json::to_value(notification) {
+                self.push_service.send(notification_value).await;
+            }
+        } else {
+            for (notification, payload) in action_notifications {
+                if notification.active && payload.mint_request_id == mint_request_id {
+                    self.mark_done_and_push(notification).await?;
+                }
+            }
+        }
+        Ok(())
     }
     async fn create_general_notification(
         &self,
@@ -338,9 +455,12 @@ mod tests {
     use std::sync::Arc;
 
     use bcr_common::core::{BillId, NodeId};
+    use bcr_common::wire::quotes::{ApplicantActionKind, ApplicantActionProjection};
     use bcr_ebill_api::service::transport_service::NotificationTransportServiceApi;
     use bcr_ebill_core::{
-        application::notification::{Notification, NotificationLevel},
+        application::notification::{
+            Notification, NotificationLevel, QuoteApplicantActionNotificationPayload,
+        },
         protocol::Email,
         protocol::Sum,
         protocol::blockchain::bill::participant::BillParticipant,
@@ -348,7 +468,10 @@ mod tests {
         protocol::event::ActionType,
     };
     use bcr_ebill_persistence::notification::NotificationFilter;
-    use mockall::predicate::eq;
+    use mockall::predicate::{eq, function};
+    use uuid::Uuid;
+
+    use super::{QUOTE_APPLICANT_ACTION_NOTIFICATION_DESCRIPTION, quote_applicant_action_payload};
 
     use crate::{
         notification_transport::NotificationTransportService,
@@ -543,6 +666,155 @@ mod tests {
             .mark_notification_as_done("notification_id")
             .await
             .expect("could not mark notification as done");
+    }
+
+    fn clarification_action(digest_byte: char) -> ApplicantActionProjection {
+        ApplicantActionProjection {
+            kind: ApplicantActionKind::Clarification,
+            revision_digest: format!("sha256:{}", digest_byte.to_string().repeat(64)),
+        }
+    }
+
+    fn quote_action_notification(
+        mint_request_id: Uuid,
+        action: ApplicantActionProjection,
+    ) -> Notification {
+        Notification::new_bill_notification(
+            &bill_id_test(),
+            &node_id_test(),
+            QUOTE_APPLICANT_ACTION_NOTIFICATION_DESCRIPTION,
+            Some(
+                serde_json::to_value(QuoteApplicantActionNotificationPayload::new(
+                    &bill_id_test(),
+                    mint_request_id,
+                    action,
+                ))
+                .unwrap(),
+            ),
+            NotificationLevel::ActionRequired,
+        )
+    }
+
+    #[tokio::test]
+    async fn dismissed_quote_applicant_action_is_not_recreated_for_same_revision() {
+        init_test_cfg();
+        let quote_id = Uuid::new_v4();
+        let action = clarification_action('a');
+        let mut current = quote_action_notification(quote_id, action.clone());
+        current.active = false;
+        let service = expect_service(|store, _, _, _| {
+            let dismissed = current.clone();
+            store
+                .expect_list()
+                .return_once(move |_| Ok(vec![dismissed]));
+        });
+
+        service
+            .reconcile_quote_applicant_action_notification(
+                &node_id_test(),
+                &bill_id_test(),
+                quote_id,
+                Some(action),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn dismissed_applicant_action_current_revision_clears_active_stale_revision() {
+        init_test_cfg();
+        let quote_id = Uuid::new_v4();
+        let stale = quote_action_notification(quote_id, clarification_action('a'));
+        let stale_id = stale.id.clone();
+        let current_action = clarification_action('b');
+        let mut dismissed_current = quote_action_notification(quote_id, current_action.clone());
+        dismissed_current.active = false;
+        let service = expect_service(|store, _, _, push| {
+            let stale = stale.clone();
+            let dismissed_current = dismissed_current.clone();
+            store
+                .expect_list()
+                .return_once(move |_| Ok(vec![stale, dismissed_current]));
+            store
+                .expect_mark_as_done()
+                .with(eq(stale_id.clone()))
+                .returning(|_| Ok(()));
+            push.expect_send().once().returning(|_| ());
+        });
+
+        service
+            .reconcile_quote_applicant_action_notification(
+                &node_id_test(),
+                &bill_id_test(),
+                quote_id,
+                Some(current_action),
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn quote_applicant_action_supersedes_revision_and_clears_when_absent() {
+        init_test_cfg();
+        let quote_id = Uuid::new_v4();
+        let previous = quote_action_notification(quote_id, clarification_action('a'));
+        let previous_id = previous.id.clone();
+        let unrelated = quote_action_notification(Uuid::new_v4(), clarification_action('c'));
+        let next_action = clarification_action('b');
+        let expected_next_action = next_action.clone();
+        let service = expect_service(|store, _, _, push| {
+            let previous = previous.clone();
+            let unrelated = unrelated.clone();
+            store
+                .expect_list()
+                .return_once(move |_| Ok(vec![previous, unrelated]));
+            store
+                .expect_mark_as_done()
+                .with(eq(previous_id.clone()))
+                .returning(|_| Ok(()));
+            let expected_next_action = expected_next_action.clone();
+            store
+                .expect_add()
+                .with(function(move |notification: &Notification| {
+                    quote_applicant_action_payload(notification).is_some_and(|payload| {
+                        payload.mint_request_id == quote_id
+                            && payload.applicant_action == expected_next_action
+                    })
+                }))
+                .returning(Ok);
+            push.expect_send().times(2).returning(|_| ());
+        });
+
+        service
+            .reconcile_quote_applicant_action_notification(
+                &node_id_test(),
+                &bill_id_test(),
+                quote_id,
+                Some(next_action),
+            )
+            .await
+            .unwrap();
+
+        let current = quote_action_notification(quote_id, clarification_action('b'));
+        let current_id = current.id.clone();
+        let service = expect_service(|store, _, _, push| {
+            let current = current.clone();
+            store.expect_list().return_once(move |_| Ok(vec![current]));
+            store
+                .expect_mark_as_done()
+                .with(eq(current_id.clone()))
+                .returning(|_| Ok(()));
+            push.expect_send().once().returning(|_| ());
+        });
+        service
+            .reconcile_quote_applicant_action_notification(
+                &node_id_test(),
+                &bill_id_test(),
+                quote_id,
+                None,
+            )
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

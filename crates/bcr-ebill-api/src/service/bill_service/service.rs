@@ -4,7 +4,9 @@ use crate::external;
 use crate::external::bitcoin::BitcoinClientApi;
 use crate::external::court::CourtClientApi;
 use crate::external::file_storage::FileStorageClientApi;
-use crate::external::mint::{MintClientApi, QuoteStatusReply, ResolveMintOffer};
+use crate::external::mint::{
+    MintClientApi, MintQuoteLookupReply, QuoteStatusReply, ResolveMintOffer,
+};
 use crate::get_config;
 use crate::service::file_server_service::{
     configured_blossom_servers, download_file_with_fallback, upload_to_blossom_servers_with_server,
@@ -13,6 +15,7 @@ use crate::service::transport_service::TransportServiceApi;
 use crate::util::{validate_bill_id_network, validate_node_id_network};
 use async_trait::async_trait;
 use bcr_common::core::{BillId, NodeId};
+use bcr_common::wire::quotes::ApplicantActionProjection;
 use bcr_ebill_core::application::bill::{
     AddressDerivationMetadataForPaymentRequest, BillCombinedBitcoinKey, BillRole, BillsBalance,
     BillsBalanceOverview, BillsFilterRole, BitcreditBillResult, Endorsement,
@@ -81,6 +84,17 @@ pub struct BillService {
     pub nostr_contact_store: Arc<dyn NostrContactStoreApi>,
 }
 impl ServiceTraitBounds for BillService {}
+
+pub(super) fn authoritative_applicant_action_for_status(
+    quote_status: &QuoteStatusReply,
+    applicant_action: Option<ApplicantActionProjection>,
+) -> Option<ApplicantActionProjection> {
+    if matches!(quote_status, QuoteStatusReply::Pending) {
+        applicant_action
+    } else {
+        None
+    }
+}
 
 impl BillService {
     pub fn new(
@@ -519,13 +533,18 @@ impl BillService {
             MintRequestStatus::Pending
             | MintRequestStatus::Offered
             | MintRequestStatus::Accepted => {
-                let updated_status = self
+                let MintQuoteLookupReply {
+                    quote: updated_status,
+                    applicant_action,
+                } = self
                     .mint_client
                     .lookup_quote_for_mint(
                         &mint_cfg.default_mint_url,
                         &mint_request.mint_request_id,
                     )
                     .await?;
+                let authoritative_applicant_action =
+                    authoritative_applicant_action_for_status(&updated_status, applicant_action);
                 // only update, if changed
                 match updated_status {
                     QuoteStatusReply::Pending => {
@@ -625,6 +644,25 @@ impl BillService {
                             .await?;
                     }
                 };
+                // The notification is a local UI projection of the Mint's authoritative state.
+                // Persist the quote transition first so a notification-store failure cannot hide
+                // an offer, expiry, denial, rejection, cancellation, or minting-enabled state.
+                if let Err(error) = self
+                    .transport_service
+                    .notification_transport()
+                    .reconcile_quote_applicant_action_notification(
+                        &mint_request.requester_node_id,
+                        &mint_request.bill_id,
+                        mint_request.mint_request_id,
+                        authoritative_applicant_action,
+                    )
+                    .await
+                {
+                    error!(
+                        "Could not reconcile applicant-action notification for mint request {}: {error}",
+                        mint_request.mint_request_id
+                    );
+                }
             }
             // Cancelled, Rejected, Expired, Denied
             _ => {
