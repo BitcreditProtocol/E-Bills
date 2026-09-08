@@ -7704,6 +7704,74 @@ async fn notification_failure_does_not_block_authoritative_mint_state_update() {
 }
 
 #[tokio::test]
+async fn terminal_mint_state_retries_applicant_action_cleanup_on_bill_poll() {
+    init_test_cfg();
+    for status in [
+        MintRequestStatus::Denied {
+            timestamp: test_ts(),
+        },
+        MintRequestStatus::Expired {
+            timestamp: test_ts(),
+        },
+        MintRequestStatus::Cancelled {
+            timestamp: test_ts(),
+        },
+        MintRequestStatus::Rejected {
+            timestamp: test_ts(),
+        },
+    ] {
+        let mut ctx = get_ctx();
+        let identity = get_baseline_identity();
+        let req_node_id = identity.identity.node_id.clone();
+        let request_id = get_uuid_v4();
+        ctx.mint_client.expect_lookup_quote_for_mint().times(0);
+        ctx.mint_store.expect_update_request().times(0);
+        ctx.mint_store
+            .expect_get_requests_for_bill()
+            .times(2)
+            .returning(move |_, _| {
+                Ok(vec![MintRequest {
+                    requester_node_id: req_node_id.clone(),
+                    bill_id: bill_id_test(),
+                    mint_node_id: node_id_test(),
+                    mint_request_id: request_id,
+                    timestamp: test_ts(),
+                    status: status.clone(),
+                }])
+            });
+        let calls = Arc::new(AtomicUsize::new(0));
+        let cleanup_calls = calls.clone();
+        ctx.transport_service
+            .expect_on_notification_transport(move |notification| {
+                let cleanup_calls = cleanup_calls.clone();
+                notification
+                    .expect_reconcile_quote_applicant_action_notification()
+                    .withf(|_, _, _, action| action.is_none())
+                    .times(2)
+                    .returning(move |_, _, _, _| {
+                        if cleanup_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                            Err(crate::service::transport_service::Error::Persistence(
+                                "synthetic notification failure".to_owned(),
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    });
+            });
+        let service = get_service(ctx);
+        for _ in 0..2 {
+            assert!(
+                service
+                    .check_mint_state(&bill_id_test(), &identity.identity.node_id)
+                    .await
+                    .is_ok()
+            );
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+}
+
+#[tokio::test]
 async fn check_mint_state_pending_accepted() {
     init_test_cfg();
     let mut ctx = get_ctx();

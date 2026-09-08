@@ -664,9 +664,22 @@ impl BillService {
                     );
                 }
             }
-            // Cancelled, Rejected, Expired, Denied
-            _ => {
-                // Req to mint is finished - nothing to do
+            MintRequestStatus::Cancelled { .. }
+            | MintRequestStatus::Rejected { .. }
+            | MintRequestStatus::Expired { .. }
+            | MintRequestStatus::Denied { .. } => {
+                // A prior poll may have persisted the terminal quote state before notification
+                // storage failed. Retrying a bill poll must still clear its stale action, without
+                // reopening the request or depending on another Mint response.
+                self.transport_service
+                    .notification_transport()
+                    .reconcile_quote_applicant_action_notification(
+                        &mint_request.requester_node_id,
+                        &mint_request.bill_id,
+                        mint_request.mint_request_id,
+                        None,
+                    )
+                    .await?;
             }
         };
         Ok(())
