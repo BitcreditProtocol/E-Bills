@@ -439,32 +439,38 @@ impl BillService {
                                     "Keyset found and minting for {}",
                                     mint_request.mint_request_id
                                 );
-                                // generate blinds
                                 let (blinded_messages, secrets, rs) =
-                                    external::mint::generate_blinds(&keyset, offer.discounted_sum)?;
-                                // persist recovery data in case something goes wrong after minting
-                                // getting here a second time for this offer will fail, which is OK
-                                // since it means that either minting, or proof creation failed and we can't
-                                // detect which one reliably
-                                // with the secrets and rs, we can re-create the blinded messages and get
-                                // blinded signatures from the mint using the mint, OR the recovery endpoint
-                                if let Err(e) = self
-                                    .mint_store
-                                    .add_recovery_data_to_offer(
-                                        &mint_request.mint_request_id,
-                                        &secrets
-                                            .iter()
-                                            .map(|s| s.to_string())
-                                            .collect::<Vec<String>>(),
-                                        &rs.iter().map(|r| r.to_string()).collect::<Vec<String>>(),
-                                    )
-                                    .await
-                                {
-                                    error!(
-                                        "Couldn't set recovery data for quote {}: {e}",
-                                        mint_request.mint_request_id
-                                    );
-                                }
+                                    if let Some(recovery) = &offer.recovery_data {
+                                        // Retry the same issuance; never replace its durable secrets.
+                                        external::mint::recover_blinds(
+                                            &keyset,
+                                            offer.discounted_sum,
+                                            recovery,
+                                        )?
+                                    } else {
+                                        let blinds = external::mint::generate_blinds(
+                                            &keyset,
+                                            offer.discounted_sum,
+                                        )?;
+                                        // Persist secrets before asking the Mint to issue value. If
+                                        // storage fails, stop rather than risk unrecoverable proofs.
+                                        self.mint_store
+                                            .add_recovery_data_to_offer(
+                                                &mint_request.mint_request_id,
+                                                &blinds
+                                                    .1
+                                                    .iter()
+                                                    .map(ToString::to_string)
+                                                    .collect::<Vec<_>>(),
+                                                &blinds
+                                                    .2
+                                                    .iter()
+                                                    .map(ToString::to_string)
+                                                    .collect::<Vec<_>>(),
+                                            )
+                                            .await?;
+                                        blinds
+                                    };
 
                                 // mint and generate proofs
                                 let proofs = self

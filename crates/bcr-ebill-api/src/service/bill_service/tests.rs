@@ -51,7 +51,7 @@ use bcr_ebill_core::{
             RECOURSE_DEADLINE_SECONDS,
         },
         event::ActionType,
-        mint::{MintOffer, MintRequest, MintRequestStatus},
+        mint::{MintOffer, MintOfferRecoveryData, MintRequest, MintRequestStatus},
     },
 };
 use bitcoin::hashes::sha256::Hash as Sha256HexHash;
@@ -7890,11 +7890,34 @@ async fn check_mint_state_offered_accepted() {
     assert!(res.is_ok());
 }
 
+fn minting_test_keyset() -> cdk02::KeySet {
+    let public_key = bcr_common::cashu::PublicKey::from_hex(
+        BcrKeys::from_private_key(&private_key_test()).get_public_key(),
+    )
+    .unwrap();
+    cdk02::KeySet {
+        id: cdk02::Id::try_from("00c7b45973e5f0fc".to_owned()).unwrap(),
+        unit: bcr_common::cashu::CurrencyUnit::Sat,
+        keys: bcr_common::cashu::Keys::new(
+            (0..=10)
+                .map(|power| (bcr_common::cashu::Amount::from(1_u64 << power), public_key))
+                .collect(),
+        ),
+        final_expiry: None,
+        active: Some(true),
+        input_fee_ppk: 0,
+    }
+}
+
 #[tokio::test]
 async fn check_mint_state_minting_enabled_proofs() {
     init_test_cfg();
     let mut ctx = get_ctx();
     let identity = get_baseline_identity();
+    ctx.identity_store
+        .expect_get_full()
+        .times(1)
+        .returning(|| Ok(get_baseline_identity()));
 
     let req_node_id = identity.identity.node_id.clone();
     ctx.company_store.expect_get_all().returning(move || {
@@ -7906,24 +7929,20 @@ async fn check_mint_state_minting_enabled_proofs() {
         );
         Ok(map)
     });
-    ctx.mint_client.expect_get_keyset_info().returning(|_, _| {
-        Ok(ecash::KeySet {
-            id: cdk02::Id::try_from("00c7b45973e5f0fc".to_owned()).unwrap(),
-            unit: bcr_common::cashu::CurrencyUnit::Sat,
-            keys: bcr_common::cashu::Keys::new(std::collections::BTreeMap::default()),
-            final_expiry: None,
-            active: Some(true),
-            input_fee_ppk: 0,
-        })
-    });
+    ctx.mint_client
+        .expect_get_keyset_info()
+        .returning(|_, _| Ok(minting_test_keyset()));
     ctx.mint_client
         .expect_mint()
+        .times(1)
         .returning(|_, _, _, _, _, _, _, _| Ok("proofs".into()));
     ctx.mint_store
         .expect_add_recovery_data_to_offer()
+        .times(1)
         .returning(|_, _, _| Ok(()));
     ctx.mint_store
         .expect_add_proofs_to_offer()
+        .times(1)
         .returning(|_, _| Ok(()));
     ctx.mint_store
         .expect_get_requests_for_bill()
@@ -7954,6 +7973,184 @@ async fn check_mint_state_minting_enabled_proofs() {
         .check_mint_state(&bill_id_test(), &identity.identity.node_id)
         .await;
     assert!(res.is_ok());
+}
+
+#[tokio::test]
+async fn minting_requires_durable_recovery_data_before_issuing_proofs() {
+    init_test_cfg();
+    let mut ctx = get_ctx();
+    let identity = get_baseline_identity();
+    let request = MintRequest {
+        requester_node_id: identity.identity.node_id.clone(),
+        bill_id: bill_id_test(),
+        mint_node_id: node_id_test(),
+        mint_request_id: get_uuid_v4(),
+        timestamp: test_ts(),
+        status: MintRequestStatus::MintingEnabled,
+    };
+    ctx.identity_store
+        .expect_get_full()
+        .times(1)
+        .returning(|| Ok(get_baseline_identity()));
+    ctx.mint_client
+        .expect_get_keyset_info()
+        .returning(|_, _| Ok(minting_test_keyset()));
+    ctx.mint_store.expect_get_offer().returning(|_| {
+        Ok(Some(MintOffer {
+            mint_request_id: get_uuid_v4(),
+            keyset_id: "keyset_id".to_owned(),
+            expiration_timestamp: Timestamp::new(1731593938).unwrap(),
+            discounted_sum: Sum::new_sat(1500).unwrap(),
+            proofs: None,
+            proofs_spent: false,
+            recovery_data: None,
+        }))
+    });
+    ctx.mint_store
+        .expect_add_recovery_data_to_offer()
+        .times(1)
+        .returning(|_, _, _| {
+            Err(bcr_ebill_persistence::Error::InsertFailed(
+                "recovery storage unavailable".to_owned(),
+            ))
+        });
+    ctx.mint_client.expect_mint().times(0);
+    ctx.mint_store.expect_add_proofs_to_offer().times(0);
+
+    let service = get_service(ctx);
+    assert!(
+        service
+            .check_mint_quote_and_update_bill_mint_state(&request)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn minting_retry_reuses_durable_blinds_after_mint_or_proof_storage_failure() {
+    init_test_cfg();
+    for fail_proof_storage in [false, true] {
+        let mut ctx = get_ctx();
+        let request = MintRequest {
+            requester_node_id: get_baseline_identity().identity.node_id,
+            bill_id: bill_id_test(),
+            mint_node_id: node_id_test(),
+            mint_request_id: get_uuid_v4(),
+            timestamp: test_ts(),
+            status: MintRequestStatus::MintingEnabled,
+        };
+        ctx.identity_store
+            .expect_get_full()
+            .returning(|| Ok(get_baseline_identity()));
+        ctx.mint_client
+            .expect_get_keyset_info()
+            .returning(|_, _| Ok(minting_test_keyset()));
+        let recovery = Arc::new(std::sync::Mutex::new(None::<MintOfferRecoveryData>));
+        let stored_recovery = recovery.clone();
+        let request_id = request.mint_request_id;
+        ctx.mint_store.expect_get_offer().returning(move |_| {
+            Ok(Some(MintOffer {
+                mint_request_id: request_id,
+                keyset_id: "00c7b45973e5f0fc".to_owned(),
+                expiration_timestamp: Timestamp::new(1731593938).unwrap(),
+                discounted_sum: Sum::new_sat(1500).unwrap(),
+                proofs: None,
+                proofs_spent: false,
+                recovery_data: stored_recovery.lock().unwrap().clone(),
+            }))
+        });
+        let stored_recovery = recovery.clone();
+        ctx.mint_store
+            .expect_add_recovery_data_to_offer()
+            .times(1)
+            .returning(move |_, secrets, rs| {
+                *stored_recovery.lock().unwrap() = Some(MintOfferRecoveryData {
+                    secrets: secrets.to_vec(),
+                    rs: rs.to_vec(),
+                });
+                Ok(())
+            });
+        let mut first_blinds = None;
+        ctx.mint_client.expect_mint().times(2).returning(
+            move |_, _, _, _, _, blinds, secrets, rs| {
+                let saved = recovery.lock().unwrap();
+                let saved = saved.as_ref().unwrap();
+                assert_eq!(
+                    secrets.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                    saved.secrets
+                );
+                assert_eq!(
+                    rs.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                    saved.rs
+                );
+                if let Some(previous) = &first_blinds {
+                    assert_eq!(&blinds, previous);
+                } else {
+                    first_blinds = Some(blinds);
+                    if !fail_proof_storage {
+                        return Err(crate::external::mint::Error::Minting.into());
+                    }
+                }
+                Ok("recovered-proofs".to_owned())
+            },
+        );
+        let mut proof_writes = 0;
+        ctx.mint_store
+            .expect_add_proofs_to_offer()
+            .times(if fail_proof_storage { 2 } else { 1 })
+            .returning(move |_, _| {
+                proof_writes += 1;
+                if fail_proof_storage && proof_writes == 1 {
+                    Err(bcr_ebill_persistence::Error::InsertFailed(
+                        "proof storage unavailable".to_owned(),
+                    ))
+                } else {
+                    Ok(())
+                }
+            });
+        let service = get_service(ctx);
+        assert!(
+            service
+                .check_mint_quote_and_update_bill_mint_state(&request)
+                .await
+                .is_err()
+        );
+        assert!(
+            service
+                .check_mint_quote_and_update_bill_mint_state(&request)
+                .await
+                .is_ok()
+        );
+    }
+}
+
+#[test]
+fn invalid_mint_recovery_data_fails_closed() {
+    let keyset = minting_test_keyset();
+    let amount = Sum::new_sat(1500).unwrap();
+    let (blinds, secrets, rs) =
+        crate::external::mint::generate_blinds(&keyset, amount.clone()).unwrap();
+    let recovery = MintOfferRecoveryData {
+        secrets: secrets.iter().map(ToString::to_string).collect(),
+        rs: rs.iter().map(ToString::to_string).collect(),
+    };
+    let recovered =
+        crate::external::mint::recover_blinds(&keyset, amount.clone(), &recovery).unwrap();
+    assert_eq!(blinds, recovered.0);
+    assert_eq!(secrets, recovered.1);
+    assert_eq!(rs, recovered.2);
+
+    let mut missing_r = recovery.clone();
+    missing_r.rs.pop();
+    let mut invalid_r = recovery.clone();
+    invalid_r.rs[0] = "invalid".to_owned();
+    let mut invalid_secret = recovery.clone();
+    invalid_secret.secrets[0] = "not-a-generated-secret".to_owned();
+    let mut missing_secret = recovery;
+    missing_secret.secrets.pop();
+    for invalid in [missing_r, invalid_r, invalid_secret, missing_secret] {
+        assert!(crate::external::mint::recover_blinds(&keyset, amount.clone(), &invalid).is_err());
+    }
 }
 
 #[tokio::test]

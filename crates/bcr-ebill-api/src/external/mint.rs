@@ -74,6 +74,8 @@ pub enum Error {
     /// an error minting
     #[error("External Mint Minting Error")]
     Minting,
+    #[error("External Mint Recovery Data Error")]
+    RecoveryData,
     /// all errors originating from the quote client
     #[error("External Mint Quote Client Error")]
     QuoteClient,
@@ -852,6 +854,50 @@ pub fn generate_blind(
     let (b_, r) =
         cashu::dhke::blind_message(secret.as_bytes(), None).map_err(|_| Error::BlindMessage)?;
     Ok((cashu::BlindedMessage::new(amount, kid, b_), secret, r))
+}
+
+/// Recreate an interrupted issuance's exact blinds with the existing Cashu primitive.
+/// Never replace malformed recovery data with fresh secrets.
+pub(crate) fn recover_blinds(
+    keyset: &cdk02::KeySet,
+    discounted_amount: Sum,
+    recovery: &bcr_ebill_core::protocol::mint::MintOfferRecoveryData,
+) -> Result<(
+    Vec<cashu::BlindedMessage>,
+    Vec<cashu::secret::Secret>,
+    Vec<cashu::SecretKey>,
+)> {
+    let amounts = cashu::Amount::from(discounted_amount.as_sat())
+        .split(&to_fee_and_amounts(keyset))
+        .map_err(|_| Error::RecoveryData)?;
+    if amounts.is_empty()
+        || amounts.len() != recovery.secrets.len()
+        || amounts.len() != recovery.rs.len()
+    {
+        return Err(Error::RecoveryData.into());
+    }
+    let mut blinded_messages = Vec::with_capacity(amounts.len());
+    let mut secrets = Vec::with_capacity(amounts.len());
+    let mut rs = Vec::with_capacity(amounts.len());
+    for ((amount, saved_secret), saved_r) in
+        amounts.into_iter().zip(&recovery.secrets).zip(&recovery.rs)
+    {
+        if !hex::decode(saved_secret).is_ok_and(|secret| secret.len() == 32) {
+            return Err(Error::RecoveryData.into());
+        }
+        let secret = cashu::secret::Secret::new(saved_secret.clone());
+        let r = cashu::SecretKey::from_hex(saved_r).map_err(|_| Error::RecoveryData)?;
+        let (blinded_secret, r) = cashu::dhke::blind_message(secret.as_bytes(), Some(r))
+            .map_err(|_| Error::RecoveryData)?;
+        blinded_messages.push(cashu::BlindedMessage::new(
+            amount,
+            keyset.id,
+            blinded_secret,
+        ));
+        secrets.push(secret);
+        rs.push(r);
+    }
+    Ok((blinded_messages, secrets, rs))
 }
 
 #[derive(Debug, Clone)]
