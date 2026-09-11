@@ -1,4 +1,5 @@
 use super::Result;
+use crate::service::transport_service::ResyncMode;
 use async_trait::async_trait;
 use bcr_common::core::{BillId, NodeId};
 use bcr_ebill_core::{
@@ -26,7 +27,12 @@ pub trait BlockTransportServiceApi: ServiceTraitBounds {
     async fn send_bill_chain_events(&self, events: BillChainEvent) -> Result<()>;
     /// Resync bill chain. If `from_nostr` is true, fetches missing blocks from Nostr first.
     /// If false, only invalidates the local cache.
-    async fn resync_bill_chain(&self, bill_id: &BillId, from_nostr: bool) -> Result<()>;
+    async fn resync_bill_chain(
+        &self,
+        bill_id: &BillId,
+        from_nostr: bool,
+        mode: ResyncMode,
+    ) -> Result<()>;
     /// Resync company chain
     async fn resync_company_chain(&self, company_id: &NodeId) -> Result<()>;
     /// Resync identity chain

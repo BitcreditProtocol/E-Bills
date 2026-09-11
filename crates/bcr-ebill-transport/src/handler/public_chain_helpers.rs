@@ -97,6 +97,22 @@ pub fn resolve_fork<B: Block>(local: &[B], remote: &[B]) -> (bool, Option<BlockI
     (true, None)
 }
 
+/// Finds the first difference between two chains and returns the block height of the differing block
+pub fn find_first_difference(local: &[BillBlock], remote: &[BillBlock]) -> Option<BlockId> {
+    for (local_block, remote_block) in local.iter().zip(remote.iter()) {
+        if local_block.id != remote_block.id || local_block.hash != remote_block.hash {
+            return Some(local_block.id);
+        }
+    }
+
+    // Local chain has more blocks than Nostr, so difference starts at the latest shared block
+    if local.len() > remote.len() {
+        return Some(local[remote.len()].id);
+    }
+
+    None
+}
+
 /// Determines if the remote block can be considered a fork point in the chain:
 /// - same id
 /// - different hash
@@ -755,5 +771,111 @@ mod tests {
         let (is_preferred, fork_point) = resolve_fork(&local, &remote);
         assert!(is_preferred);
         assert_eq!(fork_point, None);
+    }
+
+    #[test]
+    fn test_find_first_difference_identical_chains() {
+        let local = make_test_chain_with_timestamps(&[1000, 1500, 2000]);
+        let remote = local.clone();
+
+        let result = find_first_difference(&local, &remote);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_find_first_difference_remote_longer() {
+        let local = make_test_chain_with_timestamps(&[1000, 1500, 2000]);
+        let mut remote = local.clone();
+
+        let block4 = make_test_block(
+            BlockId::next_from_previous_block_id(&remote[2].id()),
+            remote[2].hash.clone(),
+            Timestamp::new(2500).unwrap(),
+        );
+        let block5 = make_test_block(
+            BlockId::next_from_previous_block_id(&block4.id()),
+            block4.hash.clone(),
+            Timestamp::new(3000).unwrap(),
+        );
+
+        remote.push(block4);
+        remote.push(block5);
+
+        let result = find_first_difference(&local, &remote);
+
+        // take blocks from remote, but nothing needs to change
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_find_first_difference_local_longer() {
+        let remote = make_test_chain_with_timestamps(&[1000, 1500, 2000]);
+        let mut local = remote.clone();
+
+        let block4 = make_test_block(
+            BlockId::next_from_previous_block_id(&local[2].id()),
+            local[2].hash.clone(),
+            Timestamp::new(2500).unwrap(),
+        );
+        let block5 = make_test_block(
+            BlockId::next_from_previous_block_id(&block4.id()),
+            block4.hash.clone(),
+            Timestamp::new(3000).unwrap(),
+        );
+
+        local.push(block4);
+        local.push(block5);
+
+        let result = find_first_difference(&local, &remote);
+
+        // extra local block 4 needs to be removed, so start at the difference at 3
+        assert_eq!(result, Some(local[3].id()));
+    }
+
+    #[test]
+    fn test_find_first_difference_fork() {
+        let shared = make_test_chain_with_timestamps(&[1000, 1500]);
+
+        let mut local = shared.clone();
+        let mut remote = shared;
+
+        let local_block3 = make_test_block(
+            BlockId::next_from_previous_block_id(&local[1].id()),
+            local[1].hash.clone(),
+            Timestamp::new(2000).unwrap(),
+        );
+        let local_block4 = make_test_block(
+            BlockId::next_from_previous_block_id(&local_block3.id()),
+            local_block3.hash.clone(),
+            Timestamp::new(2500).unwrap(),
+        );
+
+        let remote_block3 = make_test_block(
+            BlockId::next_from_previous_block_id(&remote[1].id()),
+            remote[1].hash.clone(),
+            Timestamp::new(2100).unwrap(),
+        );
+        let remote_block4 = make_test_block(
+            BlockId::next_from_previous_block_id(&remote_block3.id()),
+            remote_block3.hash.clone(),
+            Timestamp::new(2600).unwrap(),
+        );
+        let remote_block5 = make_test_block(
+            BlockId::next_from_previous_block_id(&remote_block4.id()),
+            remote_block4.hash.clone(),
+            Timestamp::new(3000).unwrap(),
+        );
+
+        local.push(local_block3);
+        local.push(local_block4);
+
+        remote.push(remote_block3);
+        remote.push(remote_block4);
+        remote.push(remote_block5);
+
+        let result = find_first_difference(&local, &remote);
+
+        assert_eq!(result, Some(local[2].id()));
     }
 }

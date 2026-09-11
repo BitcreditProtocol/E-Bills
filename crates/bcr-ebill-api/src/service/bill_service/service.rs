@@ -1888,6 +1888,21 @@ impl BillServiceApi for BillService {
         Ok(plaintext_chain)
     }
 
+    async fn dev_mode_reset_bill_mint_quote_state(&self, bill_id: &BillId) -> Result<()> {
+        // if dev mode is off - we return an error
+        if !get_config().dev_mode_config.on {
+            error!("Called dev mode operation with dev mode disabled - please enable!");
+            return Err(Error::Validation(ValidationError::InvalidOperation));
+        }
+
+        validate_bill_id_network(bill_id)?;
+
+        self.mint_store.dev_mode_reset_for_bill(bill_id).await?;
+        self.store.invalidate_bill_in_cache(bill_id).await?;
+
+        Ok(())
+    }
+
     async fn share_bill_with_court(
         &self,
         bill_id: &BillId,

@@ -68,4 +68,6 @@ pub trait MintStoreApi: ServiceTraitBounds {
     ) -> Result<()>;
     /// Gets an offer by the mint request id
     async fn get_offer(&self, mint_request_id: &Uuid) -> Result<Option<MintOffer>>;
+    /// Resets the mint quote state for the given bill - DEV MODE ONLY
+    async fn dev_mode_reset_for_bill(&self, bill_id: &BillId) -> Result<()>;
 }

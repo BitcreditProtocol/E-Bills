@@ -133,6 +133,7 @@ pub mod tests {
                 discounted_sum: Sum,
             ) -> Result<()>;
             async fn get_offer(&self, mint_request_id: &Uuid) -> Result<Option<MintOffer>>;
+            async fn dev_mode_reset_for_bill(&self, bill_id: &BillId) -> Result<()>;
         }
     }
 
