@@ -152,6 +152,7 @@ mod tests {
         protocol::event::{Event, EventEnvelope, IdentityBlockEvent},
     };
     use mockall::predicate::{always, eq};
+    use nostr::event::FinalizeEvent;
 
     use crate::{
         handler::{
@@ -252,7 +253,10 @@ mod tests {
             .expect("could not restore account");
     }
 
-    fn generate_test_chain(len: usize, invalid_blocks: bool) -> (BcrKeys, Vec<nostr::Event>) {
+    fn generate_test_chain(
+        len: usize,
+        invalid_blocks: bool,
+    ) -> (BcrKeys, Vec<nostr::event::Event>) {
         let keys = BcrKeys::from_private_key(&private_key_test());
         let mut result = Vec::new();
 
@@ -278,10 +282,10 @@ mod tests {
 
     fn generate_test_event(
         keys: &BcrKeys,
-        previous: Option<nostr::Event>,
-        root: Option<nostr::Event>,
+        previous: Option<nostr::event::Event>,
+        root: Option<nostr::event::Event>,
         height: usize,
-    ) -> nostr::Event {
+    ) -> nostr::event::Event {
         create_public_chain_event(
             &node_id_test().to_string(),
             generate_test_block(height),
@@ -291,7 +295,7 @@ mod tests {
             root,
         )
         .expect("could not create chain event")
-        .sign_with_keys(&keys.get_nostr_keys())
+        .finalize(&keys.get_nostr_keys())
         .expect("could not sign event")
     }
 

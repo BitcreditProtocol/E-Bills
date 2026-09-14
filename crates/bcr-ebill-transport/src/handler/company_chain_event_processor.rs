@@ -103,7 +103,7 @@ impl CompanyChainEventProcessorApi for CompanyChainEventProcessor {
     async fn validate_chain_event_and_sender(
         &self,
         company_id: &NodeId,
-        sender: nostr::PublicKey,
+        sender: nostr::key::PublicKey,
     ) -> Result<bool> {
         if let Ok(company) = self
             .company_store
@@ -115,7 +115,7 @@ impl CompanyChainEventProcessorApi for CompanyChainEventProcessor {
                 .signatories
                 .iter()
                 .map(|s| s.node_id.npub())
-                .collect::<Vec<nostr::PublicKey>>();
+                .collect::<Vec<nostr::key::PublicKey>>();
             Ok(signers.contains(&sender))
         } else {
             Ok(false)
@@ -1141,6 +1141,7 @@ pub mod tests {
         protocol::crypto::BcrKeys,
     };
     use mockall::predicate::{always, eq};
+    use nostr::event::FinalizeEvent;
 
     use crate::handler::test_utils::{
         MockNotificationStore, get_valid_activated_signatory, node_id_test_another,
@@ -1750,11 +1751,11 @@ pub mod tests {
 
     fn generate_test_event(
         keys: &BcrKeys,
-        previous: Option<nostr::Event>,
-        root: Option<nostr::Event>,
+        previous: Option<nostr::event::Event>,
+        root: Option<nostr::event::Event>,
         data: EventEnvelope,
         node_id: &NodeId,
-    ) -> nostr::Event {
+    ) -> nostr::event::Event {
         create_public_chain_event(
             &node_id.to_string(),
             data,
@@ -1764,7 +1765,7 @@ pub mod tests {
             root,
         )
         .expect("could not create chain event")
-        .sign_with_keys(&keys.get_nostr_keys())
+        .finalize(&keys.get_nostr_keys())
         .expect("could not sign event")
     }
 
@@ -2678,7 +2679,7 @@ pub mod tests {
             .expect_upsert()
             .withf(
                 move |hash: &Sha256Hash,
-                      _nostr_hash: &nostr::hashes::sha256::Hash,
+                      _nostr_hash: &bitcoin::hashes::sha256::Hash,
                       name: &Option<Name>,
                       server_urls: &Vec<url::Url>,
                       is_important: &Option<bool>,
@@ -2696,7 +2697,7 @@ pub mod tests {
             )
             .returning(
                 |hash: &Sha256Hash,
-                 nostr_hash: &nostr::hashes::sha256::Hash,
+                 nostr_hash: &bitcoin::hashes::sha256::Hash,
                  name: Option<Name>,
                  _: Vec<url::Url>,
                  is_important: Option<bool>,

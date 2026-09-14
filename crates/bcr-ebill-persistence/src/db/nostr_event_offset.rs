@@ -63,6 +63,7 @@ impl NostrEventOffsetStoreApi for SurrealNostrEventOffsetStore {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct NostrEventOffsetDb {
     pub event_id: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub time: DateTimeUtc,
     pub success: bool,
     pub node_id: NodeId,

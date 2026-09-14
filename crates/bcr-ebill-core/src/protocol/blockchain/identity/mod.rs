@@ -17,10 +17,10 @@ use crate::protocol::{BlockId, EditOptionalFieldMode};
 use crate::protocol::{Field, ProtocolValidationError, Validate};
 use crate::protocol::{File, OptionalPostalAddress};
 use bcr_common::core::{BillId, NodeId};
+use bitcoin::secp256k1::{PublicKey, SecretKey};
 use borsh::{from_slice, to_vec};
 use borsh_derive::{BorshDeserialize, BorshSerialize};
 use log::{error, warn};
-use secp256k1::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
@@ -382,7 +382,7 @@ impl Block for IdentityBlock {
         true
     }
 
-    fn validate_plaintext_hash(&self, private_key: &secp256k1::SecretKey) -> bool {
+    fn validate_plaintext_hash(&self, private_key: &bitcoin::secp256k1::SecretKey) -> bool {
         match crypto::decrypt_ecies(self.data(), private_key) {
             Ok(decrypted) => self.plaintext_hash() == &Sha256Hash::from_bytes(&decrypted),
             Err(e) => {

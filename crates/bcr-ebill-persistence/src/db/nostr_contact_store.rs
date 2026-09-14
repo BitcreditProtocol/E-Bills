@@ -374,7 +374,11 @@ impl NostrStoreApi for SurrealNostrStore {
 
     // === Relay Sync Retry Queue Methods ===
 
-    async fn add_failed_relay_sync(&self, relay: &url::Url, event: nostr::Event) -> Result<()> {
+    async fn add_failed_relay_sync(
+        &self,
+        relay: &url::Url,
+        event: nostr::event::Event,
+    ) -> Result<()> {
         let id = uuid::Uuid::new_v4().to_string();
         let retry = RelaySyncRetryDb {
             id: Thing::from((Self::RELAY_RETRY_TABLE.to_string(), id.clone())),
@@ -393,7 +397,7 @@ impl NostrStoreApi for SurrealNostrStore {
         &self,
         relay: &url::Url,
         limit: usize,
-    ) -> Result<Vec<nostr::Event>> {
+    ) -> Result<Vec<nostr::event::Event>> {
         let mut bindings = Bindings::default();
         bindings.add(DB_TABLE, Self::RELAY_RETRY_TABLE)?;
         bindings.add("relay_url", relay.to_string())?;
@@ -404,7 +408,7 @@ impl NostrStoreApi for SurrealNostrStore {
         );
 
         let retries: Vec<RelaySyncRetryDb> = self.db.query(&query, bindings).await?;
-        let events: Vec<nostr::Event> = retries.into_iter().map(|r| r.event).collect();
+        let events: Vec<nostr::event::Event> = retries.into_iter().map(|r| r.event).collect();
         Ok(events)
     }
 
@@ -508,7 +512,7 @@ impl TryFrom<RelaySyncStatusDb> for RelaySyncStatus {
 struct RelaySyncRetryDb {
     id: Thing,
     relay_url: String,
-    event: nostr::Event,
+    event: nostr::event::Event,
     retry_count: usize,
     created_at: Timestamp,
     last_retry_at: Option<Timestamp>,
@@ -627,6 +631,7 @@ impl TryFrom<PendingContactShareDb> for PendingContactShare {
 #[cfg(test)]
 mod tests {
     use bcr_ebill_core::protocol::crypto::BcrKeys;
+    use nostr::event::FinalizeEvent;
 
     use super::*;
     use crate::db::get_memory_db;
@@ -1119,12 +1124,12 @@ mod tests {
         let relay = url::Url::parse("wss://relay.example.com").unwrap();
 
         // Create test events
-        let keys = nostr::Keys::generate();
-        let event1 = nostr::EventBuilder::text_note("test 1")
-            .sign_with_keys(&keys)
+        let keys = nostr::key::Keys::generate();
+        let event1 = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test 1")
+            .finalize(&keys)
             .expect("Failed to sign event");
-        let event2 = nostr::EventBuilder::text_note("test 2")
-            .sign_with_keys(&keys)
+        let event2 = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test 2")
+            .finalize(&keys)
             .expect("Failed to sign event");
 
         // Add to retry queue
@@ -1153,9 +1158,9 @@ mod tests {
         let store = get_store().await;
         let relay = url::Url::parse("wss://relay.example.com").unwrap();
 
-        let keys = nostr::Keys::generate();
-        let event = nostr::EventBuilder::text_note("test")
-            .sign_with_keys(&keys)
+        let keys = nostr::key::Keys::generate();
+        let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&keys)
             .expect("Failed to sign event");
 
         // Add to retry queue
@@ -1190,9 +1195,9 @@ mod tests {
         let store = get_store().await;
         let relay = url::Url::parse("wss://relay.example.com").unwrap();
 
-        let keys = nostr::Keys::generate();
-        let event = nostr::EventBuilder::text_note("test")
-            .sign_with_keys(&keys)
+        let keys = nostr::key::Keys::generate();
+        let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&keys)
             .expect("Failed to sign event");
 
         // Add to retry queue
@@ -1260,12 +1265,12 @@ mod tests {
         let relay1 = url::Url::parse("wss://relay1.example.com").unwrap();
         let relay2 = url::Url::parse("wss://relay2.example.com").unwrap();
 
-        let keys = nostr::Keys::generate();
-        let event1 = nostr::EventBuilder::text_note("test 1")
-            .sign_with_keys(&keys)
+        let keys = nostr::key::Keys::generate();
+        let event1 = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test 1")
+            .finalize(&keys)
             .expect("Failed to sign event");
-        let event2 = nostr::EventBuilder::text_note("test 2")
-            .sign_with_keys(&keys)
+        let event2 = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test 2")
+            .finalize(&keys)
             .expect("Failed to sign event");
 
         // Add events to different relays
@@ -1293,13 +1298,16 @@ mod tests {
         let store = get_store().await;
         let relay = url::Url::parse("wss://relay.example.com").unwrap();
 
-        let keys = nostr::Keys::generate();
+        let keys = nostr::key::Keys::generate();
 
         // Add 5 events
         for i in 0..5 {
-            let event = nostr::EventBuilder::text_note(format!("test {}", i))
-                .sign_with_keys(&keys)
-                .expect("Failed to sign event");
+            let event = nostr::event::EventBuilder::new(
+                nostr::event::Kind::TextNote,
+                format!("test {}", i),
+            )
+            .finalize(&keys)
+            .expect("Failed to sign event");
             store
                 .add_failed_relay_sync(&relay, event)
                 .await

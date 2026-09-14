@@ -11,7 +11,7 @@ use bcr_ebill_persistence::SurrealDbConfig;
 use context::{Context, get_ctx};
 use job::run_jobs;
 use log::{debug, info, warn};
-use nostr_sdk::ToBech32;
+use nostr::nips::nip19::ToBech32;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
@@ -53,7 +53,6 @@ where
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct Config {
     pub log_level: Option<String>,
     pub bitcoin_network: String,
@@ -85,7 +84,6 @@ pub type Result<T> = std::result::Result<T, error::WasmError>;
 /// To check if it's an error, just check `TSResult.Error` if it's not set, it's a `TSResult.Success`
 /// even if `TSResult.Success` has `undefined` as a value.
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum TSResult<T> {
     Success(T),
     Error(JsErrorData),
@@ -345,4 +343,34 @@ pub async fn initialize_api(
         }
     });
     Ok(())
+}
+
+// nostr uses universal-time, which doesn't define a clock for WASM
+#[cfg(target_arch = "wasm32")]
+mod wasm_time {
+    use core::time::Duration;
+    use universal_time::{Instant, MonotonicClock, SystemTime, WallClock, define_time_provider};
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(js_namespace = performance, js_name = now)]
+        fn performance_now() -> f64;
+    }
+
+    struct WasmTimeProvider;
+
+    impl WallClock for WasmTimeProvider {
+        fn system_time(&self) -> SystemTime {
+            SystemTime::from_unix_duration(Duration::from_secs_f64(js_sys::Date::now() / 1000.0))
+        }
+    }
+
+    impl MonotonicClock for WasmTimeProvider {
+        fn instant(&self) -> Instant {
+            Instant::from_ticks(Duration::from_secs_f64(performance_now() / 1000.0))
+        }
+    }
+
+    define_time_provider!(WasmTimeProvider);
 }

@@ -33,8 +33,8 @@ impl NotificationHandlerApi for CompanyChainEventHandler {
         &self,
         event: EventEnvelope,
         _node_id: &NodeId, // this is only useful for DM based notifications
-        _sender: Option<nostr::PublicKey>,
-        original_event: Option<Box<nostr::Event>>,
+        _sender: Option<nostr::key::PublicKey>,
+        original_event: Option<Box<nostr::event::Event>>,
     ) -> Result<()> {
         debug!("incoming company chain event");
         if let Ok(decoded) = Event::<CompanyBlockEvent>::try_from(event.clone()) {
@@ -85,7 +85,7 @@ impl CompanyChainEventHandler {
     }
     async fn store_event(
         &self,
-        event: Box<nostr::Event>,
+        event: Box<nostr::event::Event>,
         block_height: usize,
         block_hash: &Sha256Hash,
         chain_id: &str,

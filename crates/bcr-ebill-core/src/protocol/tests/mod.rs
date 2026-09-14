@@ -205,7 +205,7 @@ pub mod tests {
     // bitcrt285psGq4Lz4fEQwfM3We5HPznJq8p1YvRaddszFaU5dY
     pub fn bill_id_test() -> BillId {
         BillId::new(
-            secp256k1::PublicKey::from_str(
+            bitcoin::secp256k1::PublicKey::from_str(
                 "026423b7d36d05b8d50a89a1b4ef2a06c88bcd2c5e650f25e122fa682d3b39686c",
             )
             .unwrap(),
@@ -213,8 +213,8 @@ pub mod tests {
         )
     }
 
-    pub fn private_key_test() -> secp256k1::SecretKey {
-        secp256k1::SecretKey::from_str(
+    pub fn private_key_test() -> bitcoin::secp256k1::SecretKey {
+        bitcoin::secp256k1::SecretKey::from_str(
             "d1ff7427912d3b81743d3b67ffa1e65df2156d3dab257316cbc8d0f35eeeabe9",
         )
         .unwrap()
@@ -225,8 +225,8 @@ pub mod tests {
             .unwrap()
     }
 
-    pub fn private_key_test_another() -> secp256k1::SecretKey {
-        secp256k1::SecretKey::from_str(
+    pub fn private_key_test_another() -> bitcoin::secp256k1::SecretKey {
+        bitcoin::secp256k1::SecretKey::from_str(
             "f50032a6a67bc86f9542e74b7becc31847ff94d74e7760dcb797435d45463345",
         )
         .unwrap()
@@ -272,7 +272,7 @@ pub mod tests {
         );
         assert_eq!(
             parsed.npub(),
-            nostr::PublicKey::from_str(TEST_NODE_ID_SECP_AS_NPUB_HEX).unwrap()
+            nostr::key::PublicKey::from_str(TEST_NODE_ID_SECP_AS_NPUB_HEX).unwrap()
         );
         assert!(parsed.equals_npub(&parsed.npub()));
         assert!(matches!(parsed.network(), bitcoin::Network::Testnet));

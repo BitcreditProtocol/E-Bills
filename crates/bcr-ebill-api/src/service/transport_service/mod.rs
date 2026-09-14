@@ -19,7 +19,7 @@ use bcr_common::core::NodeId;
 use bcr_ebill_core::protocol::crypto::BcrKeys;
 use nostr::{
     nips::{nip01::Metadata, nip19::ToBech32},
-    types::{RelayUrl, TryIntoUrl},
+    types::RelayUrl,
 };
 use std::time::Duration;
 
@@ -145,7 +145,7 @@ impl NostrContactData {
             metadata,
             relays: relays
                 .into_iter()
-                .filter_map(|r| r.try_into_url().ok())
+                .filter_map(|r| RelayUrl::parse(r.as_ref()).ok())
                 .collect(),
             blossom_servers,
         }

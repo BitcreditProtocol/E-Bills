@@ -14,9 +14,9 @@ use bcr_ebill_core::{
 };
 use bcr_ebill_persistence::notification::NotificationFilter;
 use bill::LightBitcreditBillWeb;
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 use company::CompanyWeb;
 use contact::ContactWeb;
-use nostr_sdk::hashes::sha256::Hash as Sha256HexHash;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use uuid::Uuid;
@@ -30,7 +30,6 @@ pub mod mint;
 pub mod notification;
 
 #[derive(Tsify, Debug, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct StatusResponse {
     /// Name of the currently configured Bitcoin network (e.g. `mainnet`, `testnet`).
     pub bitcoin_network: String,
@@ -47,7 +46,6 @@ pub struct StatusResponse {
 }
 
 #[derive(Tsify, Debug, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct GeneralSearchResponse {
     pub bills: Vec<LightBitcreditBillWeb>,
     pub contacts: Vec<ContactWeb>,
@@ -65,13 +63,11 @@ impl From<GeneralSearchResult> for GeneralSearchResponse {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct GeneralSearchFilterPayload {
     pub filter: GeneralSearchFilter,
 }
 
 #[derive(Tsify, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum GeneralSearchFilterItemTypeWeb {
     Company,
     Bill,
@@ -89,7 +85,6 @@ impl From<GeneralSearchFilterItemTypeWeb> for GeneralSearchFilterItemType {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct GeneralSearchFilter {
     pub search_term: String,
     pub currency: String,
@@ -97,14 +92,12 @@ pub struct GeneralSearchFilter {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct OverviewResponse {
     pub currency: String,
     pub balances: OverviewBalanceResponse,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct OverviewBalanceResponse {
     pub payee: BalanceResponse,
     pub payer: BalanceResponse,
@@ -112,25 +105,21 @@ pub struct OverviewBalanceResponse {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BalanceResponse {
     pub sum: String,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct CurrenciesResponse {
     pub currencies: Vec<CurrencyResponse>,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct CurrencyResponse {
     pub code: String,
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct CreateOptionalPostalAddressWeb {
     pub country: Option<String>,
     pub city: Option<String>,
@@ -148,7 +137,6 @@ impl CreateOptionalPostalAddressWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct OptionalPostalAddressWeb {
     #[tsify(type = "string | undefined")]
     pub country: Option<Country>,
@@ -205,7 +193,6 @@ impl From<OptionalPostalAddress> for OptionalPostalAddressWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct CreatePostalAddressWeb {
     pub country: String,
     pub city: String,
@@ -214,7 +201,6 @@ pub struct CreatePostalAddressWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct PostalAddressWeb {
     #[tsify(type = "string")]
     pub country: Country,
@@ -262,7 +248,6 @@ impl From<PostalAddress> for PostalAddressWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize, Default)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct NotificationFilters {
     pub active: Option<bool>,
     pub reference_id: Option<String>,
@@ -290,7 +275,6 @@ impl From<NotificationFilters> for NotificationFilter {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct FileWeb {
     #[tsify(type = "string")]
     pub name: Name,
@@ -321,7 +305,6 @@ impl From<File> for FileWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct BinaryFileResponse {
     pub data: Vec<u8>,
     #[tsify(type = "string")]
@@ -330,7 +313,6 @@ pub struct BinaryFileResponse {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct Base64FileResponse {
     pub data: String,
     #[tsify(type = "string")]
@@ -339,7 +321,6 @@ pub struct Base64FileResponse {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct UploadFile {
     pub data: Vec<u8>,
     pub extension: Option<String>,
@@ -369,7 +350,6 @@ impl UploadFileHandler for UploadFile {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct UploadFileResponse {
     #[tsify(type = "string")]
     pub file_upload_id: Uuid,
@@ -384,13 +364,11 @@ impl From<UploadFileResult> for UploadFileResponse {
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct BtcAddressPayload {
     pub address: String,
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct BtcAddressAndSumPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -399,13 +377,11 @@ pub struct BtcAddressAndSumPayload {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct MempoolLinkResponse {
     pub mempool_link: String,
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct LinkToPayResponse {
     pub link_to_pay: String,
 }

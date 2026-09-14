@@ -11,8 +11,8 @@ use bcr_ebill_core::protocol::{
 };
 use bcr_ebill_persistence::nostr::NostrChainEvent;
 use nostr::{
-    event::{EventId, TagKind, TagStandard},
-    nips::nip10::Marker,
+    event::EventId,
+    nips::nip10::{Marker, Nip10Tag},
 };
 
 use crate::transport::{decrypt_or_decode_public_chain_event, unwrap_public_chain_event};
@@ -126,7 +126,7 @@ pub async fn resolve_event_chains(
 // Will build up as many chains as needed for the Nostr chain structure. This does not look into
 // the actual blockchain, but will build the chains just from Nostr metadata.
 pub fn collect_event_chains(
-    events: &[nostr_sdk::Event],
+    events: &[nostr::event::Event],
     chain_id: &str,
     chain_type: BlockchainType,
     keys: &Option<BcrKeys>,
@@ -152,25 +152,26 @@ pub fn split_root(markers: &[EventContainer]) -> Option<(EventContainer, Vec<Eve
 
 // find root and reply note ids of given event
 pub fn ids_and_markers(
-    event: &nostr_sdk::Event,
+    event: &nostr::event::Event,
     chain_id: &str,
     chain_type: BlockchainType,
     keys: &Option<BcrKeys>,
 ) -> Option<EventContainer> {
     if let Ok(block) = decode_block(event.clone(), chain_id, chain_type, keys) {
         let mut result = EventContainer::new(event.clone(), None, None, block);
-        event.tags.filter_standardized(TagKind::e()).for_each(|t| {
-            if let TagStandard::Event {
-                event_id, marker, ..
-            } = t
-            {
-                match marker {
-                    Some(Marker::Root) => result.root_id = Some(event_id.to_owned()),
-                    Some(Marker::Reply) => result.reply_id = Some(event_id.to_owned()),
-                    _ => {}
-                }
+
+        for tag in event
+            .tags
+            .iter()
+            .filter_map(|tag| Nip10Tag::try_from(tag).ok())
+        {
+            let Nip10Tag::Event { id, marker, .. } = tag;
+            match marker {
+                Some(Marker::Root) => result.root_id = Some(id.to_owned()),
+                Some(Marker::Reply) => result.reply_id = Some(id.to_owned()),
+                _ => {}
             }
-        });
+        }
         Some(result)
     } else {
         None
@@ -178,12 +179,12 @@ pub fn ids_and_markers(
 }
 
 pub fn decode_block(
-    event: nostr_sdk::Event,
+    event: nostr::event::Event,
     chain_id: &str,
     chain_type: BlockchainType,
     keys: &Option<BcrKeys>,
 ) -> Result<BlockData> {
-    if let Ok(Some(payload)) = unwrap_public_chain_event(Box::new(event.clone())) {
+    if let Ok(Some(payload)) = unwrap_public_chain_event(&event) {
         if (payload.id == chain_id) && (payload.chain_type == chain_type) {
             let decoded = decrypt_or_decode_public_chain_event(&payload.payload, keys)?;
             let data = match chain_type {
@@ -244,7 +245,7 @@ impl BlockData {
 
 #[derive(Clone, Debug)]
 pub struct EventContainer {
-    pub event: nostr_sdk::Event,
+    pub event: nostr::event::Event,
     pub root_id: Option<EventId>,
     pub reply_id: Option<EventId>,
     pub children: Vec<EventContainer>,
@@ -254,7 +255,7 @@ pub struct EventContainer {
 
 impl EventContainer {
     pub fn new(
-        event: nostr_sdk::Event,
+        event: nostr::event::Event,
         root_id: Option<EventId>,
         reply_id: Option<EventId>,
         block: BlockData,
@@ -358,11 +359,12 @@ mod tests {
         blockchain::bill::{BillOpCode, block::BillBlock},
         crypto::BcrKeys,
     };
+    use nostr::event::FinalizeEvent;
     use std::str::FromStr;
 
     fn bill_id_test() -> BillId {
         BillId::new(
-            secp256k1::PublicKey::from_str(
+            bitcoin::secp256k1::PublicKey::from_str(
                 "026423b7d36d05b8d50a89a1b4ef2a06c88bcd2c5e650f25e122fa682d3b39686c",
             )
             .unwrap(),
@@ -391,8 +393,8 @@ mod tests {
     }
 
     fn make_event_container(block: BillBlock) -> EventContainer {
-        let nostr_event = nostr::event::EventBuilder::text_note("test")
-            .sign_with_keys(&nostr::key::Keys::generate())
+        let nostr_event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&nostr::key::Keys::generate())
             .expect("test event");
         EventContainer::new(nostr_event, None, None, BlockData::Bill(block))
     }

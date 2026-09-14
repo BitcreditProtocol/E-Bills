@@ -4,8 +4,8 @@ use crate::service::{Error, Result};
 use bcr_ebill_core::protocol::Sha256Hash;
 use bcr_ebill_core::protocol::crypto::BcrKeys;
 use bcr_ebill_persistence::FileReferenceStoreApi;
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 use log::{debug, warn};
-use nostr::hashes::sha256::Hash as Sha256HexHash;
 use std::sync::Arc;
 
 fn push_unique(urls: &mut Vec<url::Url>, url: url::Url) {
@@ -372,6 +372,7 @@ mod tests {
     use bcr_ebill_core::protocol::crypto::BcrKeys;
     use bitcoin::hashes::Hash;
     use mockall::predicate::eq;
+    use nostr::event::FinalizeEvent;
     use std::str::FromStr;
 
     fn test_config() -> NostrConfig {
@@ -633,7 +634,7 @@ mod tests {
         let mut file_reference_store = MockFileReferenceStoreApiMock::new();
         let mut file_ref = FileReference::new(
             file_hash.clone(),
-            nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
             Some(Name::new("test.txt").unwrap()),
         );
         file_ref.is_important = true;
@@ -660,12 +661,13 @@ mod tests {
             .once();
 
         // Create a mock metadata event with the discovered server URL
-        let keys = nostr::Keys::generate();
-        let mut event_builder = nostr::EventBuilder::new(nostr::Kind::Custom(1063), "");
+        let keys = nostr::key::Keys::generate();
+        let mut event_builder =
+            nostr::event::EventBuilder::new(nostr::event::Kind::Custom(1063), "");
         event_builder =
             event_builder
-                .tags([nostr::Tag::parse(vec!["url", discovered_server.as_ref()]).unwrap()]);
-        let metadata_event = event_builder.sign(&keys).await.expect("to sign event");
+                .tags([nostr::event::Tag::parse(vec!["url", discovered_server.as_ref()]).unwrap()]);
+        let metadata_event = event_builder.finalize(&keys).expect("to sign event");
 
         let mut transport = MockTransportServiceApi::new();
         transport
@@ -720,7 +722,7 @@ mod tests {
         let mut file_reference_store = MockFileReferenceStoreApiMock::new();
         let mut file_ref = FileReference::new(
             file_hash.clone(),
-            nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
             Some(Name::new("test.txt").unwrap()),
         );
         file_ref.is_important = true;
@@ -754,12 +756,13 @@ mod tests {
             .once();
 
         // Create metadata event with discovered server
-        let keys = nostr::Keys::generate();
-        let mut event_builder = nostr::EventBuilder::new(nostr::Kind::Custom(1063), "");
+        let keys = nostr::key::Keys::generate();
+        let mut event_builder =
+            nostr::event::EventBuilder::new(nostr::event::Kind::Custom(1063), "");
         event_builder =
             event_builder
-                .tags([nostr::Tag::parse(vec!["url", discovered_server.as_ref()]).unwrap()]);
-        let metadata_event = event_builder.sign(&keys).await.expect("to sign event");
+                .tags([nostr::event::Tag::parse(vec!["url", discovered_server.as_ref()]).unwrap()]);
+        let metadata_event = event_builder.finalize(&keys).expect("to sign event");
 
         let mut transport = MockTransportServiceApi::new();
         transport

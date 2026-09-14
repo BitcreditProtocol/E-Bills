@@ -36,14 +36,12 @@ use wasm_bindgen::prelude::*;
 use super::{FileWeb, PostalAddressWeb, contact::ContactTypeWeb, notification::NotificationWeb};
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillIdResponse {
     #[tsify(type = "string")]
     pub id: BillId,
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct BitcreditBillPayload {
     pub t: u64,
     pub country_of_issuing: String,
@@ -61,7 +59,6 @@ pub struct BitcreditBillPayload {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct EndorseBitcreditBillPayload {
     pub endorsee: String,
     #[tsify(type = "string")]
@@ -69,7 +66,6 @@ pub struct EndorseBitcreditBillPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct RequestToMintBitcreditBillPayload {
     pub mint_node: String,
     #[tsify(type = "string")]
@@ -77,7 +73,6 @@ pub struct RequestToMintBitcreditBillPayload {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct OfferToSellBitcreditBillPayload {
     #[tsify(type = "string")]
     pub buyer: NodeId,
@@ -90,7 +85,6 @@ pub struct OfferToSellBitcreditBillPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct RequestToPayBitcreditBillPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -100,7 +94,6 @@ pub struct RequestToPayBitcreditBillPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct RequestToPayAsMintBitcreditBillPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -112,7 +105,6 @@ pub struct RequestToPayAsMintBitcreditBillPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct RequestRecourseForPaymentPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -125,7 +117,6 @@ pub struct RequestRecourseForPaymentPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct RequestRecourseForAcceptancePayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -135,14 +126,12 @@ pub struct RequestRecourseForAcceptancePayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct AcceptBitcreditBillPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct RequestToAcceptBitcreditBillPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -150,14 +139,12 @@ pub struct RequestToAcceptBitcreditBillPayload {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct RejectActionBillPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillCombinedBitcoinKeyWeb {
     #[tsify(type = "number")]
     pub block_id: BlockId,
@@ -169,7 +156,6 @@ pub struct BillCombinedBitcoinKeyWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct BillCheckSweepBTCFundsPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -180,7 +166,6 @@ pub struct BillCheckSweepBTCFundsPayload {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillSweepBTCEstimateWeb {
     pub available_funds: u64,
     pub economy: BillSweepBTCOptionWeb,
@@ -198,7 +183,6 @@ impl From<SweepEstimate> for BillSweepBTCEstimateWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillSweepBTCOptionWeb {
     pub fee_rate_sat_vb: f64,
     pub fee_sat: u64,
@@ -216,7 +200,6 @@ impl From<SweepOption> for BillSweepBTCOptionWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct BillSweepBTCFundsPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -228,7 +211,6 @@ pub struct BillSweepBTCFundsPayload {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillSweepBTCFundsResultWeb {
     pub tx_id: String,
     pub link_to_tx: String,
@@ -248,7 +230,6 @@ impl From<SweepResult> for BillSweepBTCFundsResultWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ResyncBillPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -267,7 +248,6 @@ impl From<BillCombinedBitcoinKey> for BillCombinedBitcoinKeyWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Copy, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub enum BillsFilterRoleWeb {
     All,
     Payer,
@@ -287,7 +267,6 @@ impl From<BillsFilterRoleWeb> for BillsFilterRole {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct PastEndorseeWeb {
     pub pay_to_the_order_of: LightBillIdentParticipantWeb,
     pub signed: LightSignedByWeb,
@@ -308,7 +287,6 @@ impl From<PastEndorsee> for PastEndorseeWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct LightSignedByWeb {
     pub data: LightBillParticipantWeb,
     pub signatory: Option<LightBillSignatoryWeb>,
@@ -336,7 +314,6 @@ impl From<SignedBy> for LightSignedByWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct EndorsementWeb {
     pub pay_to_the_order_of: LightBillParticipantWeb,
     pub signed: LightSignedByWeb,
@@ -357,20 +334,17 @@ impl From<Endorsement> for EndorsementWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct BillsSearchFilterPayload {
     pub filter: BillsSearchFilter,
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct DateRange {
     pub from: String,
     pub to: String,
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct BillsSearchFilter {
     pub search_term: Option<String>,
     pub date_range: Option<DateRange>,
@@ -383,13 +357,11 @@ pub struct BillsSearchFilter {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillsResponse {
     pub bills: Vec<BitcreditBillWeb>,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillHistoryResponse {
     pub blocks: Vec<BillHistoryBlockWeb>,
 }
@@ -403,7 +375,6 @@ impl From<BillHistory> for BillHistoryResponse {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillHistoryBlockWeb {
     #[tsify(type = "number")]
     pub block_id: BlockId,
@@ -436,7 +407,6 @@ impl From<BillHistoryBlock> for BillHistoryBlockWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillHistoryBlockPaymentDataWeb {
     pub currency: String,
     pub sum: String,
@@ -455,31 +425,26 @@ impl From<BillHistoryBlockPaymentData> for BillHistoryBlockPaymentDataWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct LightBillsResponse {
     pub bills: Vec<LightBitcreditBillWeb>,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct EndorsementsResponse {
     pub endorsements: Vec<EndorsementWeb>,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct PastEndorseesResponse {
     pub past_endorsees: Vec<PastEndorseeWeb>,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct PastPaymentsResponse {
     pub past_payments: Vec<PastPaymentResultWeb>,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum PastPaymentResultWeb {
     Sell(PastPaymentDataSellWeb),
     Payment(PastPaymentDataPaymentWeb),
@@ -497,7 +462,6 @@ impl From<PastPaymentResult> for PastPaymentResultWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum PaymentStatusWeb {
     Requested(u64),
     Paid(u64),
@@ -517,7 +481,6 @@ impl From<PaymentStatus> for PaymentStatusWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct PastPaymentDataSellWeb {
     #[tsify(type = "number")]
     pub time_of_request: Timestamp,
@@ -548,7 +511,6 @@ impl From<PastPaymentDataSell> for PastPaymentDataSellWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct PastPaymentDataPaymentWeb {
     #[tsify(type = "number")]
     pub time_of_request: Timestamp,
@@ -578,7 +540,6 @@ impl From<PastPaymentDataPayment> for PastPaymentDataPaymentWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct PastPaymentDataRecourseWeb {
     #[tsify(type = "number")]
     pub time_of_request: Timestamp,
@@ -609,7 +570,6 @@ impl From<PastPaymentDataRecourse> for PastPaymentDataRecourseWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BitcreditBillWeb {
     #[tsify(type = "string")]
     pub id: BillId,
@@ -637,7 +597,6 @@ impl From<BitcreditBillResult> for BitcreditBillWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillStateWeb {
     pub mint: BillMintStateWeb,
     pub accept: BillAcceptStateWeb,
@@ -655,7 +614,6 @@ impl From<BillState> for BillStateWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub enum BillAcceptStateWeb {
     None,
     Requested(u64),
@@ -679,7 +637,6 @@ impl From<BillAcceptState> for BillAcceptStateWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub enum BillPaymentStateWeb {
     None,
     Requested(u64),
@@ -705,7 +662,6 @@ impl From<BillPaymentState> for BillPaymentStateWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub enum BillMintStateWeb {
     None,
     Requested,
@@ -721,7 +677,6 @@ impl From<BillMintState> for BillMintStateWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub enum BillCurrentWaitingStateWeb {
     Sell(BillWaitingForSellStateWeb),
     Payment(BillWaitingForPaymentStateWeb),
@@ -744,7 +699,6 @@ impl From<BillCurrentWaitingState> for BillCurrentWaitingStateWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillWaitingStatePaymentDataWeb {
     #[tsify(type = "number")]
     pub time_of_request: Timestamp,
@@ -776,7 +730,6 @@ impl From<BillWaitingStatePaymentData> for BillWaitingStatePaymentDataWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillWaitingForSellStateWeb {
     pub buyer: BillParticipantWeb,
     pub seller: BillParticipantWeb,
@@ -795,7 +748,6 @@ impl From<BillWaitingForSellState> for BillWaitingForSellStateWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillWaitingForPaymentStateWeb {
     pub payer: BillIdentParticipantWeb,
     pub payee: BillParticipantWeb,
@@ -814,7 +766,6 @@ impl From<BillWaitingForPaymentState> for BillWaitingForPaymentStateWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillWaitingForRecourseStateWeb {
     pub recourser: BillParticipantWeb,
     pub recoursee: BillIdentParticipantWeb,
@@ -831,7 +782,6 @@ impl From<BillWaitingForRecourseState> for BillWaitingForRecourseStateWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillStatusWeb {
     /* Marked for deprecation */
     pub acceptance: BillAcceptanceStatusWeb,
@@ -869,7 +819,6 @@ impl From<BillStatus> for BillStatusWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillAcceptanceStatusWeb {
     #[tsify(type = "number | undefined")]
     pub time_of_request_to_accept: Option<Timestamp>,
@@ -896,7 +845,6 @@ impl From<BillAcceptanceStatus> for BillAcceptanceStatusWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillPaymentStatusWeb {
     #[tsify(type = "number | undefined")]
     pub time_of_request_to_pay: Option<Timestamp>,
@@ -922,7 +870,6 @@ impl From<BillPaymentStatus> for BillPaymentStatusWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillSellStatusWeb {
     #[tsify(type = "number | undefined")]
     pub time_of_last_offer_to_sell: Option<Timestamp>,
@@ -948,7 +895,6 @@ impl From<BillSellStatus> for BillSellStatusWeb {
 
 /* Marked for deprecation */
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillRecourseStatusWeb {
     #[tsify(type = "number | undefined")]
     pub time_of_last_request_to_recourse: Option<Timestamp>,
@@ -974,7 +920,6 @@ impl From<BillRecourseStatus> for BillRecourseStatusWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillMintStatusWeb {
     pub has_mint_requests: bool,
 }
@@ -988,7 +933,6 @@ impl From<BillMintStatus> for BillMintStatusWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillDataWeb {
     #[tsify(type = "number")]
     pub time_of_drawing: Timestamp,
@@ -1032,7 +976,6 @@ impl From<BillData> for BillDataWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillParticipantsWeb {
     pub drawee: BillIdentParticipantWeb,
     pub drawer: BillIdentParticipantWeb,
@@ -1057,7 +1000,6 @@ impl From<BillParticipants> for BillParticipantsWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillCallerActionsWeb {
     pub bill_actions: Vec<BillCallerBillActionWeb>,
     pub payment_actions: Vec<BillCallerPaymentActionWeb>,
@@ -1077,7 +1019,6 @@ impl From<BillCallerActions> for BillCallerActionsWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum BillCallerBillActionWeb {
     RequestAcceptance,
     Accept,
@@ -1123,7 +1064,6 @@ impl From<BillCallerBillAction> for BillCallerBillActionWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum BillCallerPaymentActionWeb {
     Pay(BillCallerPaymentWeb),
     CheckPayment(BillCallerPaymentWeb),
@@ -1143,7 +1083,6 @@ impl From<BillCallerPaymentAction> for BillCallerPaymentActionWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum BillCallerPaymentWeb {
     Sell {
         buyer: BillParticipantWeb,
@@ -1197,7 +1136,6 @@ impl From<BillCallerPayment> for BillCallerPaymentWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct BillCallerPaymentStateWeb {
     #[tsify(type = "number")]
     pub time_of_request: Timestamp,
@@ -1234,7 +1172,6 @@ impl From<BillCallerPaymentState> for BillCallerPaymentStateWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct LightBitcreditBillWeb {
     #[tsify(type = "string")]
     pub id: BillId,
@@ -1275,7 +1212,6 @@ impl From<LightBitcreditBillResult> for LightBitcreditBillWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub enum BillParticipantWeb {
     Anon(BillAnonParticipantWeb),
     Ident(BillIdentParticipantWeb),
@@ -1291,7 +1227,6 @@ impl From<BillParticipant> for BillParticipantWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillAnonParticipantWeb {
     #[tsify(type = "string")]
     pub node_id: NodeId,
@@ -1309,7 +1244,6 @@ impl From<BillAnonParticipant> for BillAnonParticipantWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct BillIdentParticipantWeb {
     pub t: ContactTypeWeb,
     #[tsify(type = "string")]
@@ -1337,7 +1271,6 @@ impl From<BillIdentParticipant> for BillIdentParticipantWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct LightBillIdentParticipantWithAddressWeb {
     pub t: ContactTypeWeb,
     #[tsify(type = "string")]
@@ -1359,7 +1292,6 @@ impl From<LightBillIdentParticipantWithAddress> for LightBillIdentParticipantWit
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub enum LightBillParticipantWeb {
     Anon(LightBillAnonParticipantWeb),
     Ident(LightBillIdentParticipantWithAddressWeb),
@@ -1375,7 +1307,6 @@ impl From<LightBillParticipant> for LightBillParticipantWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct LightBillAnonParticipantWeb {
     #[tsify(type = "string")]
     pub node_id: NodeId,
@@ -1390,7 +1321,6 @@ impl From<LightBillAnonParticipant> for LightBillAnonParticipantWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct LightBillIdentParticipantWeb {
     pub t: ContactTypeWeb,
     #[tsify(type = "string")]
@@ -1420,7 +1350,6 @@ impl From<BillIdentParticipant> for LightBillIdentParticipantWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct LightBillSignatoryWeb {
     #[tsify(type = "string | undefined")]
     pub name: Option<Name>,
@@ -1438,7 +1367,6 @@ impl From<LightBillSignatory> for LightBillSignatoryWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ShareBillWithCourtPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
@@ -1447,7 +1375,6 @@ pub struct ShareBillWithCourtPayload {
 }
 
 #[derive(Tsify, Debug, Copy, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum BillOpCodeWeb {
     Issue,
     Accept,

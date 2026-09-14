@@ -153,7 +153,7 @@ pub trait TransportServiceApi: ServiceTraitBounds {
         &self,
         file_hash: &str,
         nostr_hash: &str,
-    ) -> Result<Vec<nostr::Event>>;
+    ) -> Result<Vec<nostr::event::Event>>;
 }
 
 #[cfg(test)]

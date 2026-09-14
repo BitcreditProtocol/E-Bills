@@ -12,6 +12,7 @@ use bcr_ebill_core::{
         crypto::btc::{BtcDescriptor, parse_private_descriptor},
     },
 };
+use bitcoin::secp256k1::{Keypair, Message, SECP256K1, SecretKey};
 use bitcoin::{
     Amount, Network, OutPoint, ScriptBuf, Sequence, TapSighashType, Transaction, TxIn, TxOut, Txid,
     Witness,
@@ -24,7 +25,6 @@ use bitcoin::{
 use log::debug;
 use log::warn;
 use miniscript::ToPublicKey;
-use secp256k1::{Keypair, Message, SECP256K1, SecretKey};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

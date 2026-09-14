@@ -4,11 +4,14 @@ use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use bcr_ebill_core::application::ServiceTraitBounds;
 use bcr_ebill_core::protocol::crypto::BcrKeys;
-use nostr::hashes::{
+use bitcoin::hashes::{
     Hash,
     sha256::{self, Hash as Sha256HexHash},
 };
-use nostr::{EventBuilder, JsonUtil, Kind, Tag, Timestamp};
+use nostr::{
+    event::{EventBuilder, FinalizeEvent, Kind, Tag},
+    types::time::Timestamp,
+};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -105,16 +108,16 @@ fn sha256_hash(bytes: &[u8]) -> Result<Sha256HexHash> {
 }
 
 fn blossom_auth_header(signer: &BcrKeys, blob_hash: &Sha256HexHash) -> Result<String> {
-    let expiration = Timestamp::from_secs(Timestamp::now().as_u64() + 60);
+    let expiration = Timestamp::from_secs(Timestamp::now().as_secs() + 60);
     let event = EventBuilder::new(Kind::Custom(24242), "")
         .tags([
             Tag::parse(["t", "upload"]).map_err(|err| Error::Auth(err.to_string()))?,
             Tag::parse(["x", blob_hash.to_string().as_str()])
                 .map_err(|err| Error::Auth(err.to_string()))?,
-            Tag::parse(["expiration", expiration.as_u64().to_string().as_str()])
+            Tag::parse(["expiration", expiration.as_secs().to_string().as_str()])
                 .map_err(|err| Error::Auth(err.to_string()))?,
         ])
-        .sign_with_keys(&signer.get_nostr_keys())
+        .finalize(&signer.get_nostr_keys())
         .map_err(|err| Error::Auth(err.to_string()))?;
 
     Ok(format!("Nostr {}", URL_SAFE_NO_PAD.encode(event.as_json())))
@@ -215,7 +218,7 @@ pub struct BlobDescriptorReply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr::{Event, JsonUtil, TagKind};
+    use nostr::event::Event;
     use std::str::FromStr;
 
     #[test]
@@ -255,7 +258,11 @@ mod tests {
 
         assert_eq!(event.kind, Kind::Custom(24242));
         assert_eq!(
-            event.tags.find(TagKind::from("x")).unwrap().content(),
+            event
+                .tags
+                .iter()
+                .find(|tag| tag.kind() == "x")
+                .and_then(|tag| tag.content()),
             Some(hash.to_string().as_str())
         );
     }

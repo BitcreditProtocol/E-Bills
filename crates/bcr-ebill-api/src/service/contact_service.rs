@@ -1326,7 +1326,7 @@ pub mod tests {
             .returning(|_| Ok((Name::new("avatar.png").unwrap(), vec![1, 2, 3])));
 
         file_upload_client.expect_upload().returning(|_, _| {
-            Ok(nostr::hashes::sha256::Hash::from_str(
+            Ok(bitcoin::hashes::sha256::Hash::from_str(
                 "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
             )
             .unwrap())
@@ -1341,7 +1341,7 @@ pub mod tests {
             .returning(|_, _, _, _, _, _| {
                 Ok(FileReference::new(
                     Sha256Hash::from_bytes(b"test"),
-                    nostr::hashes::sha256::Hash::from_str(
+                    bitcoin::hashes::sha256::Hash::from_str(
                         "0000000000000000000000000000000000000000000000000000000000000000",
                     )
                     .unwrap(),

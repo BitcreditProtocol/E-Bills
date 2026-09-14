@@ -176,7 +176,7 @@ pub async fn enforce_important_file_replication(
 async fn download_file_bytes(
     client: &dyn FileStorageClientApi,
     servers: &[url::Url],
-    nostr_hash: &nostr::hashes::sha256::Hash,
+    nostr_hash: &bitcoin::hashes::sha256::Hash,
 ) -> Result<Vec<u8>> {
     for server in servers {
         if let Ok(bytes) = client.download(server, nostr_hash).await {
@@ -367,7 +367,7 @@ mod tests {
             async fn add_identity(&self, node_id: &bcr_common::core::NodeId, keys: &bcr_ebill_core::protocol::crypto::BcrKeys) -> crate::service::transport_service::Result<()>;
             async fn process_company_historical_bill_invites(&self, company_id: &bcr_common::core::NodeId) -> crate::service::transport_service::Result<()>;
             async fn publish_file_metadata(&self, node_id: &bcr_common::core::NodeId, plaintext_hash: &str, encrypted_hash: &str, server_urls: Vec<url::Url>, mime_type: Option<String>) -> crate::service::transport_service::Result<()>;
-            async fn query_file_metadata_events(&self, file_hash: &str, nostr_hash: &str) -> crate::service::transport_service::Result<Vec<nostr::Event>>;
+            async fn query_file_metadata_events(&self, file_hash: &str, nostr_hash: &str) -> crate::service::transport_service::Result<Vec<nostr::event::Event>>;
         }
     }
 
@@ -385,7 +385,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let result = record_confirmed_servers_and_publish(
@@ -413,7 +413,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let confirmed_servers = vec![url::Url::parse("https://blossom1.example.com").unwrap()];
@@ -457,7 +457,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let confirmed_servers = vec![url::Url::parse("https://blossom1.example.com").unwrap()];
@@ -696,7 +696,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let confirmed_servers = vec![url::Url::parse("https://blossom1.example.com").unwrap()];
@@ -748,7 +748,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let mut file_ref =
@@ -796,7 +796,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let existing_server = url::Url::parse("https://existing.example.com").unwrap();
@@ -819,7 +819,7 @@ mod tests {
 
         file_storage_client
             .expect_upload()
-            .returning(|_, _| Ok(nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap()));
+            .returning(|_, _| Ok(bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap()));
 
         file_reference_store
             .expect_add_server_urls()
@@ -865,7 +865,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let server1 = url::Url::parse("https://blossom1.example.com").unwrap();
@@ -917,7 +917,7 @@ mod tests {
         let file = File {
             name: Name::new("test.txt").unwrap(),
             hash: Sha256Hash::from_bytes(b"test"),
-            nostr_hash: nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+            nostr_hash: bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
         };
 
         let configured_server = url::Url::parse("https://blossom1.example.com").unwrap();
@@ -929,7 +929,7 @@ mod tests {
             .returning(|_, _, _, _, _, _| {
                 Ok(FileReference::new(
                     Sha256Hash::from_bytes(b"test"),
-                    nostr::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
+                    bitcoin::hashes::sha256::Hash::from_slice(&[0u8; 32]).unwrap(),
                     None,
                 ))
             });

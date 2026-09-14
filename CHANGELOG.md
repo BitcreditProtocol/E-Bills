@@ -1,5 +1,13 @@
 # 0.5.16
 
+* Upgrade Dependencies
+    * especially Nostr 0.45 which had a lot of breaking changes
+    * uses latest bcr-common with more custom ecash types
+        * uses keys API v2 - WARN: this API needs to be deployed before this is deployed
+* Fix flaky test
+* Remove deprecated nip04 code
+* Migrate from `chrono` to `time `
+
 # 0.5.15
 
 * Use latest bcr-common with new bitcr Token format including the btc network

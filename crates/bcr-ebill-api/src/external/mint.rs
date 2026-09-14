@@ -3,7 +3,7 @@ use bcr_common::cashu::{self, State, nut01 as cdk01, nut02 as cdk02};
 use bcr_common::client::mint::Client as ExternalMintClient;
 use bcr_common::core::NodeId;
 use bcr_common::core::{BillId, keys::to_fee_and_amounts};
-use bcr_common::ecash::ProofsMethods;
+use bcr_common::ecash::{self, ProofsMethods};
 use bcr_common::wallet;
 use bcr_common::wire::quotes::{ResolveOffer, StatusReply};
 use bcr_ebill_core::protocol::{BitcoinAddress, BlockId, Sha256Hash, Sum};
@@ -11,8 +11,8 @@ use bcr_ebill_core::{
     application::ServiceTraitBounds, protocol::DateTimeUtc, protocol::SecretKey,
     protocol::blockchain::bill::BillToShareWithExternalParty, protocol::crypto::BcrKeys,
 };
-use nostr::hashes::{Hash, sha256};
-use secp256k1::rand::{prelude::SliceRandom, thread_rng};
+use bitcoin::hashes::{Hash, sha256};
+use bitcoin::secp256k1::rand::{prelude::SliceRandom, thread_rng};
 use std::ops::Deref;
 use std::str::FromStr;
 use thiserror::Error;
@@ -107,7 +107,7 @@ pub trait MintClientApi: ServiceTraitBounds {
         &self,
         bill_id: &BillId,
         mint_url: &url::Url,
-        keyset: cdk02::KeySet,
+        keyset: ecash::KeySet,
         quote_id: &Uuid,
         private_key: &SecretKey,
         blinded_messages: Vec<cashu::BlindedMessage>,
@@ -115,7 +115,7 @@ pub trait MintClientApi: ServiceTraitBounds {
         rs: Vec<cashu::SecretKey>,
     ) -> Result<String>;
     /// Check keyset info for a given keyset id with a given mint
-    async fn get_keyset_info(&self, mint_url: &url::Url, keyset_id: &str) -> Result<cdk02::KeySet>;
+    async fn get_keyset_info(&self, mint_url: &url::Url, keyset_id: &str) -> Result<ecash::KeySet>;
     /// Request to mint a bill with a given mint
     async fn enquire_mint_quote(
         &self,
@@ -200,7 +200,7 @@ impl MintClientApi for MintClient {
             })?;
 
         let ys = token
-            .proofs(&[keyset_info.into()])
+            .proofs(&[keyset_info])
             .map_err(|_| Error::InvalidToken)?
             .ys()
             .map_err(|_| Error::PubKey)?;
@@ -220,7 +220,7 @@ impl MintClientApi for MintClient {
         &self,
         bill_id: &BillId,
         mint_url: &url::Url,
-        keyset: cdk02::KeySet,
+        keyset: ecash::KeySet,
         quote_id: &Uuid,
         private_key: &SecretKey,
         blinded_messages: Vec<cashu::BlindedMessage>,
@@ -286,14 +286,15 @@ impl MintClientApi for MintClient {
         Ok(token.to_string())
     }
 
-    async fn get_keyset_info(&self, mint_url: &url::Url, keyset_id: &str) -> Result<cdk02::KeySet> {
+    async fn get_keyset_info(&self, mint_url: &url::Url, keyset_id: &str) -> Result<ecash::KeySet> {
         let keyset_id_parsed = cdk02::Id::from_str(keyset_id).map_err(|e| {
             log::error!("Error parsing keyset id {keyset_id} for {mint_url}: {e}");
             Error::InvalidKeySetId
         })?;
+        #[allow(deprecated)]
         let keyset = self
             .client(mint_url)?
-            .keys(keyset_id_parsed)
+            .keys_v1(keyset_id_parsed)
             .await
             .map_err(|e| {
                 log::error!("Error getting keyset info at mint {mint_url}: {e}");
@@ -431,7 +432,7 @@ impl MintClientApi for MintClient {
 }
 
 pub fn generate_blinds(
-    keyset: &cdk02::KeySet,
+    keyset: &ecash::KeySet,
     discounted_amount: Sum,
 ) -> Result<(
     Vec<cashu::BlindedMessage>,

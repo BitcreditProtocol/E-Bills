@@ -9,7 +9,7 @@ use bcr_ebill_core::{
 #[cfg(test)]
 use mockall::automock;
 
-use nostr::{Event, Filter, types::RelayUrl};
+use nostr::{event::Event, filter::Filter, types::RelayUrl};
 
 use super::{NostrContactData, Result};
 
@@ -69,7 +69,7 @@ pub trait TransportClientApi: ServiceTraitBounds {
     async fn try_decrypt_private_event(
         &self,
         event: &Event,
-    ) -> Result<Option<(NodeId, EventEnvelope, nostr::PublicKey)>>;
+    ) -> Result<Option<(NodeId, EventEnvelope, nostr::key::PublicKey)>>;
 
     /// Publishes the metadata (contact info) via the Nostr client for the specified identity
     async fn publish_metadata(

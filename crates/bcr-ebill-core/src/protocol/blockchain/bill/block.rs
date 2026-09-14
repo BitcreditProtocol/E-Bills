@@ -27,10 +27,10 @@ use crate::protocol::{City, EmailIdentityProofData, SignedIdentityProof};
 use crate::protocol::{BitcoinAddress, File, PostalAddress, ProtocolValidationError, Validate};
 use bcr_common::core::{BillId, NodeId};
 use bitcoin::base58;
+use bitcoin::secp256k1::PublicKey;
 use borsh::{from_slice, to_vec};
 use borsh_derive::{BorshDeserialize, BorshSerialize};
 use log::{error, warn};
-use secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -544,7 +544,7 @@ impl Block for BillBlock {
     }
 
     /// We validate the plaintext hash against the plaintext data from the BillBlockData wrapper
-    fn validate_plaintext_hash(&self, private_key: &secp256k1::SecretKey) -> bool {
+    fn validate_plaintext_hash(&self, private_key: &bitcoin::secp256k1::SecretKey) -> bool {
         match from_slice::<BillBlockData>(self.data()) {
             Ok(data_wrapper) => match crypto::decrypt_ecies(&data_wrapper.data, private_key) {
                 Ok(decrypted) => self.plaintext_hash() == &Sha256Hash::from_bytes(&decrypted),
@@ -608,7 +608,7 @@ impl BillBlock {
         plaintext_hash: Sha256Hash,
     ) -> Result<Self> {
         // The order here is important: identity -> company -> bill
-        let mut keys: Vec<secp256k1::SecretKey> = vec![];
+        let mut keys: Vec<bitcoin::secp256k1::SecretKey> = vec![];
         keys.push(identity_keys.get_private_key());
         if let Some(company_key) = company_keys {
             keys.push(company_key.get_private_key());

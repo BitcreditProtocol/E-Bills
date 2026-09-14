@@ -17,7 +17,7 @@ use crate::{
     },
     util::get_uuid_v4,
 };
-use bcr_common::cashu::nut02 as cdk02;
+use bcr_common::{cashu::nut02 as cdk02, ecash};
 use bcr_ebill_core::{
     application::{
         ValidationError,
@@ -52,11 +52,13 @@ use bcr_ebill_core::{
         mint::{MintOffer, MintRequest, MintRequestStatus},
     },
 };
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 use mockall::predicate::{always, eq, function};
-use nostr::hashes::sha256::Hash as Sha256HexHash;
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 use test_utils::{
     accept_block, get_baseline_bill, get_baseline_cached_bill, get_baseline_identity, get_ctx,
@@ -383,7 +385,7 @@ async fn issue_bill_baseline() {
         .expect_remove_temp_upload_folder()
         .returning(|_| Ok(()));
     ctx.file_upload_client.expect_upload().returning(|_, _| {
-        Ok(nostr::hashes::sha256::Hash::from_str(
+        Ok(bitcoin::hashes::sha256::Hash::from_str(
             "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
         )
         .unwrap())
@@ -458,7 +460,7 @@ async fn issue_bill_baseline_anon() {
         .expect_remove_temp_upload_folder()
         .returning(|_| Ok(()));
     ctx.file_upload_client.expect_upload().returning(|_, _| {
-        Ok(nostr::hashes::sha256::Hash::from_str(
+        Ok(bitcoin::hashes::sha256::Hash::from_str(
             "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
         )
         .unwrap())
@@ -611,7 +613,7 @@ async fn issue_bill_as_company() {
         .expect_remove_temp_upload_folder()
         .returning(|_| Ok(()));
     ctx.file_upload_client.expect_upload().returning(|_, _| {
-        Ok(nostr::hashes::sha256::Hash::from_str(
+        Ok(bitcoin::hashes::sha256::Hash::from_str(
             "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
         )
         .unwrap())
@@ -2507,6 +2509,32 @@ fn expect_populates_company_and_identity_block(ctx: &mut MockBillContext) {
     });
 }
 
+fn expect_populates_company_and_identity_block_with_sync(
+    ctx: &mut MockBillContext,
+    tx: Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>,
+) {
+    ctx.company_chain_store
+        .expect_get_chain()
+        .returning(|_| Ok(get_valid_company_chain()));
+    ctx.company_store
+        .expect_get()
+        .returning(|_| Ok(get_baseline_company()));
+    ctx.transport_service.expect_on_block_transport(move |t| {
+        t.expect_send_company_chain_events()
+            .returning(|_| Ok(()))
+            .once();
+        let tx = Arc::clone(&tx);
+        t.expect_send_identity_chain_events()
+            .returning(move |_| {
+                if let Some(tx) = tx.lock().unwrap().take() {
+                    let _ = tx.send(());
+                }
+                Ok(())
+            })
+            .once();
+    });
+}
+
 #[tokio::test]
 async fn accept_bill_as_company() {
     let mut ctx = get_ctx();
@@ -4048,7 +4076,7 @@ async fn check_bills_offer_to_sell_payment_company_is_seller() {
                 &bill_id_test(),
                 chain.get_latest_block(),
                 &bill_identified_participant_only_node_id(buyer_node_id.clone()),
-                Some(Timestamp::now()),
+                Some(Timestamp::now() - 5),
             )));
             Ok(chain)
         });
@@ -4063,13 +4091,21 @@ async fn check_bills_offer_to_sell_payment_company_is_seller() {
         .expect_get_email_confirmations()
         .returning(|| Ok(vec![signed_identity_proof_test()]));
 
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+
     // Populates identity block and company block
-    expect_populates_company_and_identity_block(&mut ctx);
+    expect_populates_company_and_identity_block_with_sync(&mut ctx, tx); // fix test flakyness, waiting for the expectation
 
     let service = get_service(ctx);
 
     let res = service.check_bills_offer_to_sell_payment().await;
     assert!(res.is_ok());
+
+    tokio::time::timeout(Duration::from_secs(2), rx)
+        .await
+        .expect("send_identity_chain_events was not called")
+        .expect("notification channel dropped");
 }
 
 #[tokio::test]
@@ -7140,7 +7176,7 @@ async fn check_mint_state_for_all_bills_baseline() {
         .expect_lookup_quote_for_mint()
         .returning(|_, _| {
             Ok(QuoteStatusReply::Denied {
-                tstamp: DateTimeUtc::default(),
+                tstamp: DateTimeUtc::UNIX_EPOCH,
             })
         });
     let req_node_id = identity.identity.node_id.clone();
@@ -7175,7 +7211,7 @@ async fn check_mint_state_baseline() {
         .expect_lookup_quote_for_mint()
         .returning(|_, _| {
             Ok(QuoteStatusReply::Denied {
-                tstamp: DateTimeUtc::default(),
+                tstamp: DateTimeUtc::UNIX_EPOCH,
             })
         });
     let req_node_id = identity.identity.node_id.clone();
@@ -7250,7 +7286,7 @@ async fn check_mint_state_pending_offered() {
         .returning(|_, _| {
             Ok(QuoteStatusReply::Offered {
                 keyset_id: cdk02::Id::try_from("00c7b45973e5f0fc".to_owned()).unwrap(),
-                expiration_date: DateTimeUtc::default(),
+                expiration_date: DateTimeUtc::UNIX_EPOCH,
                 discounted: bitcoin::Amount::default(),
             })
         });
@@ -7335,7 +7371,7 @@ async fn check_mint_state_minting_enabled_proofs() {
         Ok(map)
     });
     ctx.mint_client.expect_get_keyset_info().returning(|_, _| {
-        Ok(cdk02::KeySet {
+        Ok(ecash::KeySet {
             id: cdk02::Id::try_from("00c7b45973e5f0fc".to_owned()).unwrap(),
             unit: bcr_common::cashu::CurrencyUnit::Sat,
             keys: bcr_common::cashu::Keys::new(std::collections::BTreeMap::default()),
@@ -7392,7 +7428,7 @@ async fn check_mint_state_minting_enabled_check_spent() {
 
     let req_node_id = identity.identity.node_id.clone();
     ctx.mint_client.expect_get_keyset_info().returning(|_, _| {
-        Ok(cdk02::KeySet {
+        Ok(ecash::KeySet {
             id: cdk02::Id::try_from("00c7b45973e5f0fc".to_owned()).unwrap(),
             unit: bcr_common::cashu::CurrencyUnit::Sat,
             keys: bcr_common::cashu::Keys::new(std::collections::BTreeMap::default()),

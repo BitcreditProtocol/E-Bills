@@ -15,10 +15,12 @@ crate-type = ["cdylib"]
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
+bitcoin.workspace = true
 futures.workspace = true
 serde_repr.workspace = true
+getrandom = { workspace = true, features = ["wasm_js"] }
 log.workspace = true
-chrono.workspace = true
+time = {workspace = true, features = ["wasm-bindgen", "serde", "formatting", "parsing", "macros"]}
 thiserror.workspace = true
 uuid.workspace = true
 anyhow.workspace = true
@@ -27,12 +29,12 @@ tokio_with_wasm.workspace = true
 fern = "0.7.1"
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2"
-js-sys = "0.3.77"
+js-sys = "0.3.103"
 wasm-bindgen-futures = "0.4.50"
-nostr-sdk.workspace = true
+nostr.workspace = true
 console_error_panic_hook = "0.1.7"
 console_log = { version = "1.0.0", features = ["color"] }
-tsify = { version = "0.5.5", features = ["js"] }
+tsify = { version = "0.5.6", features = ["js"] }
 bcr-ebill-core.workspace = true
 bcr-ebill-persistence.workspace = true
 bcr-ebill-api.workspace = true
@@ -40,3 +42,4 @@ bcr-ebill-transport.workspace = true
 bcr-common.workspace = true
 base64.workspace = true
 url.workspace = true
+universal-time = "0.3"

@@ -354,8 +354,8 @@ impl NostrTransportService {
                     }
                 }
                 None => {
-                    // Public broadcast retry: payload is JSON nostr::Event
-                    match serde_json::from_str::<nostr::Event>(&queued_message.payload) {
+                    // Public broadcast retry: payload is JSON nostr::event::Event
+                    match serde_json::from_str::<nostr::event::Event>(&queued_message.payload) {
                         Ok(event) => {
                             let node = self.get_node_transport(&queued_message.sender_id);
                             node.broadcast_event(&event).await

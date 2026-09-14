@@ -44,8 +44,8 @@ use bcr_ebill_persistence::identity::{IdentityChainStoreApi, IdentityStoreApi};
 use bcr_ebill_persistence::notification::EmailNotificationStoreApi;
 use bcr_ebill_persistence::{ContactStoreApi, FileReferenceStoreApi};
 use bitcoin::base58;
+use bitcoin::secp256k1::{PublicKey, SecretKey};
 use log::{debug, error};
-use secp256k1::{PublicKey, SecretKey};
 use std::sync::Arc;
 use uuid::Uuid;
 

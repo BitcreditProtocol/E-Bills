@@ -24,6 +24,7 @@ pub struct Notification {
     /// A description to quickly show to a user in the ui (probably a translation key)
     pub description: String,
     /// The datetime when the notification was created
+    #[serde(with = "time::serde::rfc3339")]
     pub datetime: DateTimeUtc,
     /// Whether the notification is active or not. If active the user should still perform
     /// some action to dismiss the notification.

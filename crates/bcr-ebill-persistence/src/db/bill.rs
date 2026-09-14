@@ -1753,7 +1753,6 @@ pub mod tests {
             },
         },
     };
-    use chrono::Months;
     use surrealdb::{Surreal, engine::any::Any};
 
     async fn get_db() -> Surreal<Any> {
@@ -2187,19 +2186,27 @@ pub mod tests {
         assert_eq!(res_after_sold.as_ref().unwrap().len(), 0);
     }
 
+    fn sub_one_month(dt: time::OffsetDateTime) -> time::OffsetDateTime {
+        use time::{Date, Month};
+        let month = dt.month();
+        let previous_month = month.previous();
+        let previous_year = if month == Month::January {
+            dt.year() - 1
+        } else {
+            dt.year()
+        };
+        let day = dt.day().min(previous_month.length(previous_year));
+        let date = Date::from_calendar_date(previous_year, previous_month, day)
+            .expect("valid previous month");
+        dt.replace_date(date)
+    }
+
     #[tokio::test]
     async fn test_bills_waiting_for_payment_offer_to_sell_expired() {
         let db = get_db().await;
         let chain_store = get_chain_store(db.clone()).await;
         let store = get_store(db.clone()).await;
-        let now_minus_one_month = Timestamp::new(
-            Timestamp::now()
-                .to_datetime()
-                .checked_sub_months(Months::new(1))
-                .unwrap()
-                .timestamp() as u64,
-        )
-        .unwrap();
+        let now_minus_one_month: Timestamp = sub_one_month(Timestamp::now().to_datetime()).into();
 
         let first_block = get_first_block(&bill_id_test());
         chain_store
@@ -2477,14 +2484,7 @@ pub mod tests {
         let db = get_db().await;
         let chain_store = get_chain_store(db.clone()).await;
         let store = get_store(db.clone()).await;
-        let now_minus_one_month = Timestamp::new(
-            Timestamp::now()
-                .to_datetime()
-                .checked_sub_months(Months::new(1))
-                .unwrap()
-                .timestamp() as u64,
-        )
-        .unwrap();
+        let now_minus_one_month: Timestamp = sub_one_month(Timestamp::now().to_datetime()).into();
 
         let first_block = get_first_block(&bill_id_test());
         chain_store

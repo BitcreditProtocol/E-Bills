@@ -165,7 +165,6 @@ Generally, most API functions are promise-based and return a `Result<T, JSValue>
 
 ```rust
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 struct JsErrorData {
     error: &'static str,
     message: String,
@@ -219,7 +218,6 @@ Example:
 
 ```rust
 #[derive(Tsify, Debug, Copy, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum NotificationTypeWeb {
     General,
     Bill,

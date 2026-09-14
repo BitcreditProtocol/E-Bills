@@ -5,8 +5,7 @@ use crate::protocol::{
     BitcoinAddress, BlockId, ProtocolValidationError, PublicKey, Sha256Hash,
     blockchain::bill::BillOpCode,
 };
-use bitcoin::secp256k1::Scalar;
-use secp256k1::SECP256K1;
+use bitcoin::secp256k1::{SECP256K1, Scalar};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
@@ -84,15 +83,18 @@ pub fn get_address_to_pay(
     // tweak key with the given tweak hash
     let tweak = Scalar::from_be_bytes(tweak_hash.decode_to_array())
         .map_err(|e| Error::Tweak(e.to_string()))?;
-    let tweaked_key = combined_key.add_exp_tweak(secp256k1::global::SECP256K1, &tweak)?;
+    let tweaked_key = combined_key.add_exp_tweak(bitcoin::secp256k1::global::SECP256K1, &tweak)?;
 
     let (x_only_pub_key, _parity) = tweaked_key.x_only_public_key();
 
-    Ok(
-        bitcoin::Address::p2tr(secp256k1::global::SECP256K1, x_only_pub_key, None, network)
-            .as_unchecked()
-            .to_owned(),
+    Ok(bitcoin::Address::p2tr(
+        bitcoin::secp256k1::global::SECP256K1,
+        x_only_pub_key,
+        None,
+        network,
     )
+    .as_unchecked()
+    .to_owned())
 }
 
 /// Get tr descriptor with wif for the given keys
@@ -116,7 +118,7 @@ pub fn get_combined_private_descriptor(
     };
     let desc_seckey = miniscript::descriptor::DescriptorSecretKey::Single(single);
     let desc_pubkey = desc_seckey
-        .to_public(secp256k1::global::SECP256K1)
+        .to_public(bitcoin::secp256k1::global::SECP256K1)
         .map_err(|e| Error::BtcDescriptor(e.to_string()))?;
     let kmap = miniscript::descriptor::KeyMap::from_iter(std::iter::once((
         desc_pubkey.clone(),
@@ -196,9 +198,9 @@ pub fn calculate_tweak_hash_for_payment_request(
 
 #[cfg(test)]
 pub mod tests {
+    use bitcoin::secp256k1::{SecretKey, global::SECP256K1};
     use bitcoin::{AddressType, Network, PrivateKey};
     use miniscript::{Descriptor, DescriptorPublicKey};
-    use secp256k1::{SecretKey, global::SECP256K1};
 
     use super::*;
 

@@ -16,13 +16,11 @@ use crate::data::{CreateOptionalPostalAddressWeb, CreatePostalAddressWeb};
 use super::{FileWeb, PostalAddressWeb};
 
 #[derive(Tsify, Debug, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct ContactsResponse {
     pub contacts: Vec<ContactWeb>,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct NewContactPayload {
     pub t: u64,
     #[tsify(type = "string")]
@@ -39,7 +37,6 @@ pub struct NewContactPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct EditContactPayload {
     #[tsify(type = "string")]
     pub node_id: NodeId,
@@ -55,7 +52,6 @@ pub struct EditContactPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct SearchContactsPayload {
     pub search_term: String,
     pub include_logical: Option<bool>,
@@ -104,7 +100,6 @@ impl From<ContactTypeWeb> for ContactType {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct ContactWeb {
     pub t: ContactTypeWeb,
     #[tsify(type = "string")]
@@ -150,7 +145,6 @@ impl From<Contact> for ContactWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct PendingContactShareWeb {
     pub id: String,
     #[tsify(type = "string")]
@@ -178,13 +172,11 @@ impl From<PendingContactShare> for PendingContactShareWeb {
 }
 
 #[derive(Tsify, Debug, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct PendingContactSharesResponse {
     pub pending_shares: Vec<PendingContactShareWeb>,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ApproveContactSharePayload {
     pub pending_share_id: String,
     pub add_to_contacts: bool,

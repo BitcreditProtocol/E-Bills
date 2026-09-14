@@ -70,7 +70,7 @@ use bcr_ebill_core::protocol::event::{
 use bcr_ebill_persistence::nostr::NostrChainEvent;
 
 use async_trait::async_trait;
-use secp256k1::{PublicKey, SecretKey};
+use bitcoin::secp256k1::{PublicKey, SecretKey};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
@@ -181,8 +181,8 @@ impl NotificationHandlerApi for TestEventHandler<TestEventPayload> {
         &self,
         event: EventEnvelope,
         _: &NodeId,
-        _: Option<nostr::PublicKey>,
-        _: Option<Box<nostr::Event>>,
+        _: Option<nostr::key::PublicKey>,
+        _: Option<Box<nostr::event::Event>>,
     ) -> Result<()> {
         *self.called.lock().await = true;
         let event: Event<TestEventPayload> = event.try_into()?;
@@ -449,7 +449,7 @@ pub async fn get_mock_relay() -> MockRelay {
 
 pub async fn get_mock_nostr_client() -> NostrClient {
     let relay = get_mock_relay().await;
-    let url = url::Url::parse(&relay.url()).unwrap();
+    let url = url::Url::parse(&relay.url().await.to_string()).unwrap();
     let keys = BcrKeys::new();
 
     let config = NostrConfig::new(
@@ -638,9 +638,9 @@ mockall::mock! {
         async fn resolve_contact(&self, node_id: &NodeId) -> Result<Option<NostrContactData>>;
         async fn resolve_public_chain(&self, id: &str, chain_type: BlockchainType) -> Result<Vec<nostr::event::Event>>;
         async fn add_contact_subscription(&self, contact: &NodeId) -> Result<()>;
-        async fn resolve_private_events(&self, filter: nostr::Filter) -> Result<Vec<nostr::event::Event>>;
-        async fn resolve_events(&self, filter: nostr::Filter) -> Result<Vec<nostr::event::Event>>;
-        async fn try_decrypt_private_event(&self, event: &nostr::event::Event) -> Result<Option<(NodeId, EventEnvelope, nostr::PublicKey)>>;
+        async fn resolve_private_events(&self, filter: nostr::filter::Filter) -> Result<Vec<nostr::event::Event>>;
+        async fn resolve_events(&self, filter: nostr::filter::Filter) -> Result<Vec<nostr::event::Event>>;
+        async fn try_decrypt_private_event(&self, event: &nostr::event::Event) -> Result<Option<(NodeId, EventEnvelope, nostr::key::PublicKey)>>;
         async fn publish_metadata(&self, node_id: &NodeId, data: &nostr::nips::nip01::Metadata) -> Result<()>;
         async fn publish_relay_list(&self, node_id: &NodeId, relays: Vec<nostr::types::RelayUrl>) -> Result<()>;
         async fn publish_blossom_server_list(&self, node_id: &NodeId, blossom_servers: Vec<url::Url>) -> Result<()>;
@@ -662,7 +662,7 @@ mockall::mock! {
     impl ServiceTraitBounds for NotificationHandler {}
     #[async_trait]
     impl NotificationHandlerApi for NotificationHandler {
-        async fn handle_event(&self, event: EventEnvelope, identity: &NodeId, sender: Option<nostr::PublicKey>, original_event: Option<Box<nostr::Event>>) -> Result<()>;
+        async fn handle_event(&self, event: EventEnvelope, identity: &NodeId, sender: Option<nostr::key::PublicKey>, original_event: Option<Box<nostr::event::Event>>) -> Result<()>;
         fn handles_event(&self, event_type: &EventType) -> bool;
     }
 }
@@ -747,7 +747,7 @@ mockall::mock! {
 
     #[async_trait]
     impl FileMetadataProcessorApi for FileMetadataProcessor {
-        async fn process_file_metadata(&self, event: Box<nostr::Event>, node_id: &NodeId) -> crate::Result<()>;
+        async fn process_file_metadata(&self, event: Box<nostr::event::Event>, node_id: &NodeId) -> crate::Result<()>;
     }
 }
 
@@ -761,20 +761,20 @@ mockall::mock! {
         async fn upsert(
             &self,
             hash: &Sha256Hash,
-            nostr_hash: &nostr::hashes::sha256::Hash,
+            nostr_hash: &bitcoin::hashes::sha256::Hash,
             name: Option<Name>,
             server_urls: Vec<url::Url>,
             is_important: Option<bool>,
             context: Vec<bcr_ebill_core::protocol::file_reference::FileReferenceContext>,
         ) -> bcr_ebill_persistence::Result<bcr_ebill_core::protocol::file_reference::FileReference>;
         async fn get(&self, hash: &Sha256Hash) -> bcr_ebill_persistence::Result<Option<bcr_ebill_core::protocol::file_reference::FileReference>>;
-        async fn find_by_nostr_hash(&self, nostr_hash: &nostr::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<Option<bcr_ebill_core::protocol::file_reference::FileReference>>;
+        async fn find_by_nostr_hash(&self, nostr_hash: &bitcoin::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<Option<bcr_ebill_core::protocol::file_reference::FileReference>>;
         async fn delete(&self, hash: &Sha256Hash) -> bcr_ebill_persistence::Result<()>;
         async fn list(&self) -> bcr_ebill_persistence::Result<Vec<bcr_ebill_core::protocol::file_reference::FileReference>>;
         async fn list_important(&self) -> bcr_ebill_persistence::Result<Vec<bcr_ebill_core::protocol::file_reference::FileReference>>;
         async fn add_server_urls(&self, hash: &Sha256Hash, urls: Vec<url::Url>) -> bcr_ebill_persistence::Result<bool>;
         async fn mark_important(&self, hash: &Sha256Hash, important: bool) -> bcr_ebill_persistence::Result<()>;
-        async fn update_nostr_hash(&self, hash: &Sha256Hash, nostr_hash: &nostr::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<()>;
+        async fn update_nostr_hash(&self, hash: &Sha256Hash, nostr_hash: &bitcoin::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<()>;
         async fn add_context(&self, hash: &Sha256Hash, context: bcr_ebill_core::protocol::file_reference::FileReferenceContext) -> bcr_ebill_persistence::Result<bool>;
         async fn remove_context(&self, hash: &Sha256Hash, context: &bcr_ebill_core::protocol::file_reference::FileReferenceContext) -> bcr_ebill_persistence::Result<bool>;
     }
@@ -998,8 +998,8 @@ mockall::mock! {
         async fn update_relay_sync_status(&self, relay: &url::Url, status: SyncStatus) -> bcr_ebill_persistence::Result<()>;
         async fn update_relay_sync_progress(&self, relay: &url::Url, timestamp: bcr_ebill_core::protocol::Timestamp) -> bcr_ebill_persistence::Result<()>;
         async fn update_relay_last_seen(&self, relay: &url::Url, timestamp: bcr_ebill_core::protocol::Timestamp) -> bcr_ebill_persistence::Result<()>;
-        async fn add_failed_relay_sync(&self, relay: &url::Url, event: nostr::Event) -> bcr_ebill_persistence::Result<()>;
-        async fn get_pending_relay_retries(&self, relay: &url::Url, limit: usize) -> bcr_ebill_persistence::Result<Vec<nostr::Event>>;
+        async fn add_failed_relay_sync(&self, relay: &url::Url, event: nostr::event::Event) -> bcr_ebill_persistence::Result<()>;
+        async fn get_pending_relay_retries(&self, relay: &url::Url, limit: usize) -> bcr_ebill_persistence::Result<Vec<nostr::event::Event>>;
         async fn mark_relay_retry_success(&self, relay: &url::Url, event_id: &str) -> bcr_ebill_persistence::Result<()>;
         async fn mark_relay_retry_failed(&self, relay: &url::Url, event_id: &str, max_retries: usize) -> bcr_ebill_persistence::Result<()>;
     }

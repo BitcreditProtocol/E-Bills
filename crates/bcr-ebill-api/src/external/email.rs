@@ -7,9 +7,9 @@ use bcr_ebill_core::protocol::{
     crypto::Error as CryptoError, event::bill_events::BillEventType,
 };
 use bitcoin::base58;
+use bitcoin::secp256k1::schnorr::Signature;
+use bitcoin::secp256k1::{Keypair, Message, SECP256K1, SecretKey};
 use borsh_derive::BorshSerialize;
-use secp256k1::schnorr::Signature;
-use secp256k1::{Keypair, Message, SECP256K1, SecretKey};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

@@ -65,8 +65,8 @@ pub trait NotificationHandlerApi: ServiceTraitBounds {
         &self,
         event: bcr_ebill_core::protocol::event::EventEnvelope,
         node_id: &NodeId,
-        sender: Option<nostr::PublicKey>,
-        original_event: Option<Box<nostr::Event>>,
+        sender: Option<nostr::key::PublicKey>,
+        original_event: Option<Box<nostr::event::Event>>,
     ) -> Result<()>;
 }
 
@@ -89,7 +89,7 @@ pub trait BillChainEventProcessorApi: ServiceTraitBounds {
     async fn validate_chain_event_and_sender(
         &self,
         bill_id: &BillId,
-        sender: nostr::PublicKey,
+        sender: nostr::key::PublicKey,
     ) -> Result<bool>;
 
     /// Resolves the Bill chain blocks from Nostr for the given bill id.
@@ -130,7 +130,7 @@ pub trait CompanyChainEventProcessorApi: ServiceTraitBounds {
     async fn validate_chain_event_and_sender(
         &self,
         node_id: &NodeId,
-        sender: nostr::PublicKey,
+        sender: nostr::key::PublicKey,
     ) -> Result<bool>;
 
     /// Tries to resync the chain for the given node id. This will try to find the company keys and
@@ -158,7 +158,11 @@ pub trait IdentityChainEventProcessorApi: ServiceTraitBounds {
 
     /// Validates that a given bill id is relevant for us, and if so also checks that the sender
     /// of the event is part of the chain this event is for.
-    fn validate_chain_event_and_sender(&self, node_id: &NodeId, sender: nostr::PublicKey) -> bool;
+    fn validate_chain_event_and_sender(
+        &self,
+        node_id: &NodeId,
+        sender: nostr::key::PublicKey,
+    ) -> bool;
 
     /// Tries to resync the chain for the primary local identity. This will try to find the chain data for the current identity.
     /// Will add all potentially missing blocks to the chain.
@@ -173,7 +177,7 @@ impl ServiceTraitBounds for MockIdentityChainEventProcessorApi {}
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 pub trait DirectMessageEventProcessorApi: ServiceTraitBounds {
-    async fn process_direct_message(&self, event: Box<nostr::Event>) -> Result<()>;
+    async fn process_direct_message(&self, event: Box<nostr::event::Event>) -> Result<()>;
 }
 
 #[cfg(test)]
@@ -211,8 +215,8 @@ impl NotificationHandlerApi for LoggingEventHandler {
         &self,
         event: EventEnvelope,
         identity: &NodeId,
-        _: Option<nostr::PublicKey>,
-        _: Option<Box<nostr::Event>>,
+        _: Option<nostr::key::PublicKey>,
+        _: Option<Box<nostr::event::Event>>,
     ) -> Result<()> {
         trace!("Received event: {event:?} for identity: {identity}");
         Ok(())
@@ -311,8 +315,8 @@ mod tests {
             &self,
             event: EventEnvelope,
             _: &NodeId,
-            _: Option<nostr::PublicKey>,
-            _: Option<Box<nostr::Event>>,
+            _: Option<nostr::key::PublicKey>,
+            _: Option<Box<nostr::event::Event>>,
         ) -> Result<()> {
             *self.called.lock().await = true;
             let event: Event<TestEventPayload> = event.try_into()?;
@@ -338,7 +342,7 @@ mod tests {
 #[cfg(test)]
 mod test_utils {
     use async_trait::async_trait;
-    use bcr_common::cashu::{self, nut02 as cdk02};
+    use bcr_common::cashu::{self};
     use bcr_common::core::{BillId, NodeId};
     use bcr_ebill_api::external::mint::MintClientApi;
     use bcr_ebill_api::external::mint::{QuoteStatusReply, ResolveMintOffer};
@@ -387,7 +391,7 @@ mod test_utils {
         notification::NotificationFilter,
     };
     use mockall::mock;
-    use nostr::event::EventBuilder;
+    use nostr::event::{EventBuilder, FinalizeEvent};
     use std::{collections::HashMap, str::FromStr};
 
     use crate::PushApi;
@@ -410,14 +414,14 @@ mod test_utils {
                 &self,
                 bill_id: &BillId,
                 mint_url: &url::Url,
-                keyset: cdk02::KeySet,
+                keyset: bcr_common::ecash::KeySet,
                 quote_id: &uuid::Uuid,
                 private_key: &SecretKey,
                 blinded_messages: Vec<cashu::BlindedMessage>,
                 secrets: Vec<cashu::secret::Secret>,
                 rs: Vec<cashu::SecretKey>,
             ) -> bcr_ebill_api::external::mint::Result<String>;
-            async fn get_keyset_info(&self, mint_url: &url::Url, keyset_id: &str) -> bcr_ebill_api::external::mint::Result<cdk02::KeySet>;
+            async fn get_keyset_info(&self, mint_url: &url::Url, keyset_id: &str) -> bcr_ebill_api::external::mint::Result<bcr_common::ecash::KeySet>;
             async fn enquire_mint_quote(
                 &self,
                 mint_url: &url::Url,
@@ -608,8 +612,8 @@ mod test_utils {
             async fn update_relay_sync_status(&self, relay: &url::Url, status: SyncStatus) -> Result<()>;
             async fn update_relay_sync_progress(&self, relay: &url::Url, timestamp: bcr_ebill_core::protocol::Timestamp) -> Result<()>;
             async fn update_relay_last_seen(&self, relay: &url::Url, timestamp: bcr_ebill_core::protocol::Timestamp) -> Result<()>;
-            async fn add_failed_relay_sync(&self, relay: &url::Url, event: nostr::Event) -> Result<()>;
-            async fn get_pending_relay_retries(&self, relay: &url::Url, limit: usize) -> Result<Vec<nostr::Event>>;
+            async fn add_failed_relay_sync(&self, relay: &url::Url, event: nostr::event::Event) -> Result<()>;
+            async fn get_pending_relay_retries(&self, relay: &url::Url, limit: usize) -> Result<Vec<nostr::event::Event>>;
             async fn mark_relay_retry_success(&self, relay: &url::Url, event_id: &str) -> Result<()>;
             async fn mark_relay_retry_failed(&self, relay: &url::Url, event_id: &str, max_retries: usize) -> Result<()>;
         }
@@ -742,9 +746,9 @@ mod test_utils {
         }
     }
 
-    pub fn get_test_nostr_event() -> nostr::Event {
-        EventBuilder::text_note("message")
-            .sign_with_keys(&nostr::key::Keys::generate())
+    pub fn get_test_nostr_event() -> nostr::event::Event {
+        EventBuilder::new(nostr::event::Kind::TextNote, "message")
+            .finalize(&nostr::key::Keys::generate())
             .expect("Could not create nostr test event")
     }
 
@@ -936,8 +940,8 @@ mod test_utils {
             .unwrap()
     }
 
-    pub fn private_key_test_another() -> secp256k1::SecretKey {
-        secp256k1::SecretKey::from_str(
+    pub fn private_key_test_another() -> bitcoin::secp256k1::SecretKey {
+        bitcoin::secp256k1::SecretKey::from_str(
             "f50032a6a67bc86f9542e74b7becc31847ff94d74e7760dcb797435d45463345",
         )
         .unwrap()

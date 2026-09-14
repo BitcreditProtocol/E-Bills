@@ -4,11 +4,11 @@ use bcr_ebill_core::application::notification::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::{UtcOffset, macros::format_description};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct NotificationStatusWeb {
     #[tsify(type = "string")]
     pub node_id: NodeId,
@@ -16,7 +16,6 @@ pub struct NotificationStatusWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct NotificationWeb {
     pub id: String,
     #[tsify(type = "string")]
@@ -41,7 +40,11 @@ impl From<Notification> for NotificationWeb {
             description: val.description,
             datetime: val
                 .datetime
-                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                .to_offset(UtcOffset::UTC)
+                .format(&format_description!(
+                    "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+                ))
+                .expect("valid datetime format"),
             active: val.active,
             level: val.level.into(),
             payload: val.payload,
@@ -50,7 +53,6 @@ impl From<Notification> for NotificationWeb {
 }
 
 #[derive(Tsify, Debug, Copy, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum NotificationTypeWeb {
     General,
     Company,
@@ -70,7 +72,6 @@ impl From<NotificationType> for NotificationTypeWeb {
 }
 
 #[derive(Tsify, Debug, Copy, Clone, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub enum NotificationLevelWeb {
     Informational,
     ActionRequired,

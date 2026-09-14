@@ -1,11 +1,14 @@
 use std::{fmt::Display, str::FromStr};
 
-use chrono::{NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use time::{
+    Date as TimeDate, format_description::StaticFormatDescription, macros::format_description,
+};
 
 use crate::protocol::{DateTimeUtc, ProtocolValidationError, Timestamp};
 
-pub const DEFAULT_DATE_FORMAT: &str = "%Y-%m-%d";
+pub const DEFAULT_DATE_FORMAT: StaticFormatDescription =
+    format_description!("[year]-[month]-[day]");
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
 #[serde(try_from = "String", into = "String")]
@@ -14,10 +17,9 @@ pub struct Date(String);
 impl Date {
     pub fn new(n: impl Into<String>) -> Result<Self, ProtocolValidationError> {
         let s = n.into();
-        NaiveDate::parse_from_str(&s, DEFAULT_DATE_FORMAT)
-            .map_err(|_| ProtocolValidationError::InvalidDate)?
-            .and_hms_opt(0, 0, 0)
-            .ok_or(ProtocolValidationError::InvalidDate)?;
+
+        TimeDate::parse(&s, DEFAULT_DATE_FORMAT)
+            .map_err(|_| ProtocolValidationError::InvalidDate)?;
 
         Ok(Self(s))
     }
@@ -27,25 +29,32 @@ impl Date {
     }
 
     pub fn to_timestamp(&self) -> Timestamp {
-        let naive_date_time = NaiveDate::parse_from_str(&self.0, DEFAULT_DATE_FORMAT)
-            .expect("has the right format")
-            .and_hms_opt(0, 0, 0)
-            .expect("can set time");
-        let date_utc = Utc.from_utc_datetime(&naive_date_time);
+        let date = TimeDate::parse(&self.0, DEFAULT_DATE_FORMAT).expect("has the right format");
 
-        Timestamp::new(date_utc.timestamp() as u64).expect("checked")
+        let timestamp = date.midnight().assume_utc().unix_timestamp();
+
+        Timestamp::new(timestamp as u64).expect("checked")
     }
 }
 
 impl From<DateTimeUtc> for Date {
     fn from(value: DateTimeUtc) -> Self {
-        Date(value.format(DEFAULT_DATE_FORMAT).to_string())
+        Date(
+            value
+                .format(DEFAULT_DATE_FORMAT)
+                .expect("date format is valid"),
+        )
     }
 }
 
 impl From<Timestamp> for Date {
     fn from(value: Timestamp) -> Self {
-        Date(value.to_datetime().format(DEFAULT_DATE_FORMAT).to_string())
+        Date(
+            value
+                .to_datetime()
+                .format(DEFAULT_DATE_FORMAT)
+                .expect("date format is valid"),
+        )
     }
 }
 
@@ -95,6 +104,7 @@ mod tests {
     use super::*;
     use borsh::BorshDeserialize;
     use serde::{Deserialize, Serialize};
+    use time::Month;
 
     #[derive(
         Debug,
@@ -164,8 +174,15 @@ mod tests {
     #[test]
     fn test_date_string_to_timestamp_with_default_format() {
         let date_str = "2025-01-15";
-        let expected_timestamp: Timestamp =
-            Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap().into();
+        let expected_timestamp: Timestamp = TimeDate::from_calendar_date(2025, Month::January, 15)
+            .unwrap()
+            .midnight()
+            .assume_utc()
+            .unix_timestamp()
+            .try_into()
+            .map(Timestamp::new)
+            .unwrap()
+            .unwrap();
         assert_eq!(
             Date::new(date_str).unwrap().to_timestamp(),
             expected_timestamp

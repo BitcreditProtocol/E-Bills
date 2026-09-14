@@ -1,6 +1,6 @@
 use bcr_common::core::NodeId;
+use bitcoin::secp256k1::SecretKey;
 use borsh::{BorshDeserialize, BorshSerialize};
-use secp256k1::SecretKey;
 
 /// Event payload when keys for contact details are shared. This is used for both personal identity
 /// and company. The shared keys are derived from the private key of the identity or company and

@@ -33,8 +33,8 @@ impl NotificationHandlerApi for IdentityChainEventHandler {
         &self,
         event: EventEnvelope,
         _node_id: &NodeId, // this is only useful for DM based notifications
-        _sender: Option<nostr::PublicKey>,
-        original_event: Option<Box<nostr::Event>>,
+        _sender: Option<nostr::key::PublicKey>,
+        original_event: Option<Box<nostr::event::Event>>,
     ) -> Result<()> {
         debug!("incoming identity chain event");
         if let Ok(decoded) = Event::<IdentityBlockEvent>::try_from(event.clone()) {
@@ -85,7 +85,7 @@ impl IdentityChainEventHandler {
     }
     async fn store_event(
         &self,
-        event: &nostr::Event,
+        event: &nostr::event::Event,
         block_height: usize,
         block_hash: &Sha256Hash,
         chain_id: &str,

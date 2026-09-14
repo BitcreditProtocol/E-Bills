@@ -1956,8 +1956,8 @@ pub mod tests {
             file_reference::FileReference,
         },
     };
+    use bitcoin::hashes::sha256::Hash as Sha256HexHash;
     use mockall::predicate::eq;
-    use nostr::hashes::sha256::Hash as Sha256HexHash;
     use std::{collections::HashMap, str::FromStr};
 
     fn get_service(
@@ -2496,7 +2496,7 @@ pub mod tests {
             .expect_add_block()
             .returning(|_, _| Ok(()));
         file_upload_client.expect_upload().returning(|_, _| {
-            Ok(nostr::hashes::sha256::Hash::from_str(
+            Ok(bitcoin::hashes::sha256::Hash::from_str(
                 "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
             )
             .unwrap())
@@ -2546,7 +2546,7 @@ pub mod tests {
             .returning(|_, _, _, _, _, _| {
                 Ok(FileReference::new(
                     Sha256Hash::from_bytes(b"test"),
-                    nostr::hashes::sha256::Hash::from_str(
+                    bitcoin::hashes::sha256::Hash::from_str(
                         "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
                     )
                     .unwrap(),
@@ -2787,7 +2787,7 @@ pub mod tests {
         storage.expect_exists().returning(|_| true);
         storage.expect_update().returning(|_, _| Ok(()));
         file_upload_client.expect_upload().returning(|_, _| {
-            Ok(nostr::hashes::sha256::Hash::from_str(
+            Ok(bitcoin::hashes::sha256::Hash::from_str(
                 "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
             )
             .unwrap())
@@ -2819,7 +2819,7 @@ pub mod tests {
             .returning(|_, _, _, _, _, _| {
                 Ok(FileReference::new(
                     Sha256Hash::from_bytes(b"test"),
-                    nostr::hashes::sha256::Hash::from_str(
+                    bitcoin::hashes::sha256::Hash::from_str(
                         "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
                     )
                     .unwrap(),
@@ -4131,7 +4131,7 @@ pub mod tests {
             .expect_upload()
             .times(1)
             .returning(|_, _| {
-                Ok(nostr::hashes::sha256::Hash::from_str(
+                Ok(bitcoin::hashes::sha256::Hash::from_str(
                     "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
                 )
                 .unwrap())
@@ -4157,7 +4157,7 @@ pub mod tests {
             .returning(|_, _, _, _, _, _| {
                 Ok(FileReference::new(
                     Sha256Hash::from_bytes(b"test"),
-                    nostr::hashes::sha256::Hash::from_str(
+                    bitcoin::hashes::sha256::Hash::from_str(
                         "d277fe40da2609ca08215cdfbeac44835d4371a72f1416a63c87efd67ee24bfa",
                     )
                     .unwrap(),

@@ -42,8 +42,8 @@ impl NotificationHandlerApi for CompanyInviteEventHandler {
         &self,
         event: EventEnvelope,
         node_id: &NodeId,
-        _sender: Option<nostr::PublicKey>,
-        _: Option<Box<nostr::Event>>,
+        _sender: Option<nostr::key::PublicKey>,
+        _: Option<Box<nostr::event::Event>>,
     ) -> Result<()> {
         debug!("incoming company chain invite for {node_id}");
         if let Ok(decoded) = Event::<ChainInvite>::try_from(event.clone()) {
@@ -165,6 +165,7 @@ mod tests {
         protocol::crypto::BcrKeys,
     };
     use mockall::predicate::eq;
+    use nostr::event::FinalizeEvent;
 
     #[test]
     fn test_single_block() {
@@ -373,7 +374,10 @@ mod tests {
     // generates event chains. If invalid blocks is enabled chains of size 3 will have two equal
     // valid chains. From there on len even gives one valid and N - 2 invalid (shorter) chains.
     // Uneven give two valid (equal len) and N - 1 invalid chains.
-    fn generate_test_chain(len: usize, invalid_blocks: bool) -> (BcrKeys, Vec<nostr::Event>) {
+    fn generate_test_chain(
+        len: usize,
+        invalid_blocks: bool,
+    ) -> (BcrKeys, Vec<nostr::event::Event>) {
         let keys = BcrKeys::from_private_key(&private_key_test());
         let mut result = Vec::new();
 
@@ -415,10 +419,10 @@ mod tests {
 
     fn generate_test_event(
         keys: &BcrKeys,
-        previous: Option<nostr::Event>,
-        root: Option<nostr::Event>,
+        previous: Option<nostr::event::Event>,
+        root: Option<nostr::event::Event>,
         height: usize,
-    ) -> nostr::Event {
+    ) -> nostr::event::Event {
         create_public_chain_event(
             &node_id_test().to_string(),
             generate_test_block(height),
@@ -428,7 +432,7 @@ mod tests {
             root,
         )
         .expect("could not create chain event")
-        .sign_with_keys(&keys.get_nostr_keys())
+        .finalize(&keys.get_nostr_keys())
         .expect("could not sign event")
     }
 

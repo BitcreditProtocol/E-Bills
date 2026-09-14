@@ -8,7 +8,7 @@ use bcr_ebill_core::protocol::{
     Address, City, Country, Email, EmailIdentityProofData, File, Name, OptionalPostalAddress,
     PostalAddress, SchnorrSignature, Sha256Hash, SignedIdentityProof, Timestamp, Zip,
 };
-use nostr::hashes::sha256::Hash as Sha256HexHash;
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 use serde::{Deserialize, Serialize};
 #[cfg(not(target_arch = "wasm32"))]
 use surrealdb::{

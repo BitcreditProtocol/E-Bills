@@ -9,31 +9,32 @@ use bcr_ebill_core::protocol::{
 use bcr_ebill_api::service::transport_service::{Error, Result};
 
 use bitcoin::base58;
-use log::{error, info};
+use log::error;
 
 use nostr::{
-    Event,
-    event::{EventBuilder, EventId, Kind, Tag, TagKind, TagStandard, UnsignedEvent},
-    filter::{Alphabet, Filter, SingleLetterTag},
-    key::PublicKey,
-    nips::{nip10::Marker, nip59::UnwrappedGift, nip73::ExternalContentId},
-    signer::NostrSigner,
+    event::{Event, EventBuilder, EventId, IntoEventBuilder, Kind, Tag, UnsignedEvent},
+    filter::{Filter, SingleLetterTag},
+    key::{Keys, PublicKey},
+    nips::{
+        nip10::{Marker, Nip10Tag, TextNoteReplyBuilder},
+        nip59::UnwrappedGift,
+        nip73::{ExternalContentId, Nip73Tag},
+    },
 };
 
 // A bit abitrary. This is to protect our client from beeing overwhelmed by spam. The downside is
 // that we will not be able to extract a chain even if there are valid blocks on the relay.
 const CHAIN_EVENT_LIMIT: usize = 10000;
 
-pub async fn unwrap_direct_message<T: NostrSigner>(
+pub async fn unwrap_direct_message(
     event: &Event,
-    signer: &T,
+    signer: &Keys,
 ) -> Option<(EventEnvelope, PublicKey, EventId, nostr::types::Timestamp)> {
     match event.kind {
-        Kind::EncryptedDirectMessage => unwrap_nip04_envelope(event, signer).await,
         Kind::GiftWrap => unwrap_nip17_envelope(event, signer).await,
         _ => {
             error!(
-                "Received event with kind {} but expected EncryptedDirectMessage or GiftWrap",
+                "Received event with kind {} but expected GiftWrap",
                 event.kind
             );
             None
@@ -42,38 +43,13 @@ pub async fn unwrap_direct_message<T: NostrSigner>(
 }
 
 /// Unwrap envelope from private direct message
-async fn unwrap_nip04_envelope<T: NostrSigner>(
+async fn unwrap_nip17_envelope(
     event: &Event,
-    signer: &T,
-) -> Option<(EventEnvelope, PublicKey, EventId, nostr::types::Timestamp)> {
-    let mut result: Option<(EventEnvelope, PublicKey, EventId, nostr::types::Timestamp)> = None;
-    if event.kind == Kind::EncryptedDirectMessage {
-        match signer.nip04_decrypt(&event.pubkey, &event.content).await {
-            Ok(decrypted) => {
-                result = extract_text_envelope(&decrypted)
-                    .map(|e| (e, event.pubkey, event.id, event.created_at));
-            }
-            Err(e) => {
-                error!("Decrypting event failed: {e}");
-            }
-        }
-    } else {
-        info!(
-            "Received event with kind {} but expected EncryptedDirectMessage",
-            event.kind
-        );
-    }
-    result
-}
-
-/// Unwrap envelope from private direct message
-async fn unwrap_nip17_envelope<T: NostrSigner>(
-    event: &Event,
-    signer: &T,
+    signer: &Keys,
 ) -> Option<(EventEnvelope, PublicKey, EventId, nostr::types::Timestamp)> {
     let mut result: Option<(EventEnvelope, PublicKey, EventId, nostr::types::Timestamp)> = None;
     if event.kind == Kind::GiftWrap {
-        result = match UnwrappedGift::from_gift_wrap(signer, event).await {
+        result = match UnwrappedGift::from_gift_wrap_async(signer, event).await {
             Ok(UnwrappedGift { rumor, sender }) => {
                 extract_event_envelope(rumor).map(|e| (e, sender, event.id, event.created_at))
             }
@@ -86,15 +62,14 @@ async fn unwrap_nip17_envelope<T: NostrSigner>(
 /// Unwraps a Nostr chain event with its metadata. Will return the encrypted, or encoded payload and
 /// the metadata if the event matches a public chain event. Otherwise it returns None.
 pub fn unwrap_public_chain_event(
-    event: Box<Event>,
+    event: &Event,
 ) -> Result<Option<EncryptedOrEncodedPublicEventData>> {
     let data: Vec<EncryptedOrEncodedPublicEventData> = event
         .tags
-        .filter_standardized(TagKind::SingleLetter(SingleLetterTag::lowercase(
-            Alphabet::I,
-        )))
-        .filter_map(|t| match t {
-            TagStandard::ExternalContent {
+        .iter()
+        .filter_map(|tag| Nip73Tag::try_from(tag).ok())
+        .filter_map(|tag| match tag {
+            Nip73Tag::ExternalContent {
                 content:
                     ExternalContentId::BlockchainAddress {
                         address, chain_id, ..
@@ -122,7 +97,7 @@ pub fn chain_filter(id: &str, chain_type: BlockchainType) -> Filter {
 }
 
 pub fn chain_tag() -> SingleLetterTag {
-    SingleLetterTag::lowercase(Alphabet::I)
+    SingleLetterTag::LOWERCASE_I
 }
 
 pub fn tag_content(id: &str, blockchain: BlockchainType) -> ExternalContentId {
@@ -134,10 +109,9 @@ pub fn tag_content(id: &str, blockchain: BlockchainType) -> ExternalContentId {
 }
 
 pub fn bcr_nostr_tag(id: &str, blockchain: BlockchainType) -> Tag {
-    TagStandard::ExternalContent {
+    Nip73Tag::ExternalContent {
         content: tag_content(id, blockchain),
         hint: None,
-        uppercase: false,
     }
     .into()
 }
@@ -145,18 +119,15 @@ pub fn bcr_nostr_tag(id: &str, blockchain: BlockchainType) -> Tag {
 pub fn root_and_reply_id(event: &Event) -> (Option<EventId>, Option<EventId>) {
     let mut root: Option<EventId> = None;
     let mut reply: Option<EventId> = None;
-    event.tags.filter_standardized(TagKind::e()).for_each(|t| {
-        if let TagStandard::Event {
-            event_id, marker, ..
-        } = t
-        {
+    for tag in event.tags.iter().filter(|tag| tag.kind() == "e") {
+        if let Ok(Nip10Tag::Event { id, marker, .. }) = Nip10Tag::try_from(tag) {
             match marker {
-                Some(Marker::Root) => root = Some(event_id.to_owned()),
-                Some(Marker::Reply) => reply = Some(event_id.to_owned()),
+                Some(Marker::Root) => root = Some(id.to_owned()),
+                Some(Marker::Reply) => reply = Some(id.to_owned()),
                 _ => {}
             }
         }
-    });
+    }
     (root, reply)
 }
 
@@ -205,25 +176,6 @@ pub struct EncryptedOrEncodedPublicEventData {
     pub payload: String,
 }
 
-/// Creates a NIP-04 encrypted event for sending as private message.
-pub async fn create_nip04_event<T: NostrSigner>(
-    signer: &T,
-    public_key: &PublicKey,
-    message: &str,
-) -> Result<EventBuilder> {
-    Ok(EventBuilder::new(
-        Kind::EncryptedDirectMessage,
-        signer
-            .nip04_encrypt(public_key, message)
-            .await
-            .map_err(|e| {
-                error!("Failed to encrypt direct private message: {e}");
-                Error::Crypto("Failed to encrypt direct private message".to_string())
-            })?,
-    )
-    .tag(Tag::public_key(*public_key)))
-}
-
 /// Takes an event envelope and creates a public chain event with appropriate tags and base58
 /// encoded payload.
 pub fn create_public_chain_event(
@@ -236,23 +188,22 @@ pub fn create_public_chain_event(
 ) -> Result<EventBuilder> {
     let payload = base58::encode(&borsh::to_vec(&event)?);
     let event = match previous_event {
-        Some(evt) => EventBuilder::text_note_reply(payload, &evt, root_event.as_ref(), None)
+        Some(evt) => {
+            let mut builder = TextNoteReplyBuilder::new(payload, &evt);
+
+            if let Some(root) = root_event.as_ref() {
+                builder = builder.root(root);
+            }
+
+            builder
+                .into_event_builder()
+                .tag(bcr_nostr_tag(id, blockchain))
+        }
+        None => EventBuilder::new(nostr::event::Kind::TextNote, payload)
             .tag(bcr_nostr_tag(id, blockchain)),
-        None => EventBuilder::text_note(payload).tag(bcr_nostr_tag(id, blockchain)),
     };
     let event = event.custom_created_at(block_time.into());
     Ok(event)
-}
-
-fn extract_text_envelope(message: &str) -> Option<EventEnvelope> {
-    if let Ok(data) = base58::decode(message)
-        && let Ok(envelope) = borsh::from_slice::<EventEnvelope>(&data)
-    {
-        Some(envelope)
-    } else {
-        error!("Json deserializing event envelope failed");
-        None
-    }
 }
 
 fn extract_event_envelope(rumor: UnsignedEvent) -> Option<EventEnvelope> {

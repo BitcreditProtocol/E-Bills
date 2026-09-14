@@ -382,6 +382,7 @@ mod tests {
     use bcr_ebill_core::protocol::event::{BillBlockEvent, Event};
     use bcr_ebill_core::protocol::{BlockId, Sha256Hash, Timestamp};
     use bcr_ebill_persistence::nostr::NostrChainEvent;
+    use nostr::event::FinalizeEvent;
 
     fn create_test_chain_event(
         chain_id: &str,
@@ -404,8 +405,8 @@ mod tests {
             block_hash,
             received: bcr_ebill_core::protocol::Timestamp::now(),
             time: bcr_ebill_core::protocol::Timestamp::now(),
-            payload: nostr::EventBuilder::text_note("test")
-                .sign_with_keys(&nostr::key::Keys::generate())
+            payload: nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+                .finalize(&nostr::key::Keys::generate())
                 .unwrap(),
         }
     }
@@ -504,9 +505,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_identity_chain_event_uses_optimistic_broadcast() {
-        let signed_event = nostr::EventBuilder::text_note("identity chain event")
-            .sign_with_keys(&nostr::Keys::generate())
-            .unwrap();
+        let signed_event =
+            nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "identity chain event")
+                .finalize(&nostr::key::Keys::generate())
+                .unwrap();
         let mut transport = MockNotificationJsonTransport::new();
         transport
             .expect_build_public_chain_event()
@@ -534,9 +536,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_company_chain_event_uses_optimistic_broadcast() {
-        let signed_event = nostr::EventBuilder::text_note("company chain event")
-            .sign_with_keys(&nostr::Keys::generate())
-            .unwrap();
+        let signed_event =
+            nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "company chain event")
+                .finalize(&nostr::key::Keys::generate())
+                .unwrap();
         let mut transport = MockNotificationJsonTransport::new();
         transport
             .expect_build_public_chain_event()
@@ -564,9 +567,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_broadcast_error_triggers_full_message_retry() {
-        let signed_event = nostr::EventBuilder::text_note("retry event")
-            .sign_with_keys(&nostr::Keys::generate())
-            .unwrap();
+        let signed_event =
+            nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "retry event")
+                .finalize(&nostr::key::Keys::generate())
+                .unwrap();
         let mut transport = MockNotificationJsonTransport::new();
         transport
             .expect_build_public_chain_event()
@@ -613,11 +617,11 @@ mod tests {
     }
 
     fn generate_test_event(
-        previous: Option<nostr::Event>,
-        root: Option<nostr::Event>,
+        previous: Option<nostr::event::Event>,
+        root: Option<nostr::event::Event>,
         height: usize,
         block: BillBlock,
-    ) -> nostr::Event {
+    ) -> nostr::event::Event {
         let keys = BcrKeys::from_private_key(&private_key_test());
         let block_event = Event::new_bill_chain(BillBlockEvent {
             bill_id: bill_id_test(),
@@ -635,7 +639,7 @@ mod tests {
             root,
         )
         .expect("could not create chain event")
-        .sign_with_keys(&keys.get_nostr_keys())
+        .finalize(&keys.get_nostr_keys())
         .expect("could not sign event")
     }
 

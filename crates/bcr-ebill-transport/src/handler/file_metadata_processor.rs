@@ -3,9 +3,9 @@ use async_trait::async_trait;
 use bcr_common::core::NodeId;
 use bcr_ebill_core::{application::ServiceTraitBounds, protocol::Sha256Hash};
 use bcr_ebill_persistence::FileReferenceStoreApi;
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 use log::{debug, trace, warn};
-use nostr::Event;
-use nostr::hashes::sha256::Hash as Sha256HexHash;
+use nostr::event::Event;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -219,6 +219,7 @@ mod tests {
         Name,
         file_reference::{FileReference, FileReferenceContext},
     };
+    use nostr::event::FinalizeEvent;
     use std::str::FromStr;
 
     mockall::mock! {
@@ -252,16 +253,16 @@ mod tests {
     }
 
     async fn create_test_event_with_tags(tags: Vec<Vec<&str>>) -> Box<Event> {
-        use nostr::{Keys, Kind};
+        use nostr::{event::Kind, key::Keys};
 
         let keys = Keys::generate();
-        let mut event_builder = nostr::EventBuilder::new(Kind::Custom(1063), "");
+        let mut event_builder = nostr::event::EventBuilder::new(Kind::Custom(1063), "");
 
         for tag in tags {
-            event_builder = event_builder.tags([nostr::Tag::parse(tag).unwrap()]);
+            event_builder = event_builder.tags([nostr::event::Tag::parse(tag).unwrap()]);
         }
 
-        let event = event_builder.sign(&keys).await.expect("to sign event");
+        let event = event_builder.finalize(&keys).expect("to sign event");
         Box::new(event)
     }
 

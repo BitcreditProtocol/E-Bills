@@ -1,7 +1,7 @@
 use bitcoin::address::NetworkUnchecked;
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
+use bitcoin::secp256k1::{PublicKey, SecretKey};
 use borsh::io::{ErrorKind, Read, Write};
-use nostr::hashes::sha256::Hash as Sha256HexHash;
-use secp256k1::{PublicKey, SecretKey};
 use std::str::FromStr;
 
 pub fn serialize_pubkey<W: Write>(

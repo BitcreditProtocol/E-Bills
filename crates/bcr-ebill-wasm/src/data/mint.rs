@@ -8,7 +8,6 @@ use tsify::Tsify;
 use uuid::Uuid;
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct MintRequestWeb {
     #[tsify(type = "string")]
     pub requester_node_id: NodeId,
@@ -37,7 +36,6 @@ impl From<MintRequest> for MintRequestWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub enum MintRequestStatusWeb {
     Pending,
     Denied { timestamp: u64 },
@@ -72,7 +70,6 @@ impl From<MintRequestStatus> for MintRequestStatusWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct MintOfferWeb {
     #[tsify(type = "string")]
     pub mint_request_id: Uuid,
@@ -98,13 +95,11 @@ impl From<MintOffer> for MintOfferWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct MintRequestStateResponse {
     pub request_states: Vec<MintRequestStateWeb>,
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct MintRequestStateWeb {
     pub request: MintRequestWeb,
     pub offer: Option<MintOfferWeb>,

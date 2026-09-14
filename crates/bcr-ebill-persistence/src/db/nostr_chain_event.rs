@@ -229,7 +229,7 @@ impl From<NostrChainEventDb> for NostrChainEvent {
 #[cfg(test)]
 mod tests {
     use bcr_ebill_core::{protocol::Timestamp, protocol::crypto::BcrKeys};
-    use nostr::event::EventBuilder;
+    use nostr::event::{EventBuilder, FinalizeEvent};
 
     use super::*;
     use crate::db::get_memory_db;
@@ -465,9 +465,8 @@ mod tests {
 
     fn get_test_event() -> Event {
         let keys = BcrKeys::new().get_nostr_keys();
-        EventBuilder::text_note("content")
-            .build(keys.public_key)
-            .sign_with_keys(&keys)
+        EventBuilder::new(nostr::event::Kind::TextNote, "content")
+            .finalize(&keys)
             .expect("could not create nostr test event")
     }
 }

@@ -89,8 +89,10 @@ impl BcrKeys {
     }
 
     /// Returns the key pair as a nostr key pair
-    pub fn get_nostr_keys(&self) -> nostr::Keys {
-        nostr::Keys::new(self.inner.secret_key().into())
+    pub fn get_nostr_keys(&self) -> nostr::key::Keys {
+        let nostr_key = nostr::key::SecretKey::from_slice(&self.inner.secret_key().secret_bytes())
+            .expect("valid secret key");
+        nostr::key::Keys::new(nostr_key)
     }
 
     /// Returns the secp256k1 key pair

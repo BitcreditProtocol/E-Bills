@@ -1,4 +1,4 @@
-use nostr::hashes::sha256::Hash as Sha256HexHash;
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 use serde::{Deserialize, Serialize};
 
 use crate::protocol::{Name, Sha256Hash, Timestamp};

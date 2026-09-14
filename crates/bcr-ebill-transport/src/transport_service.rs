@@ -352,12 +352,9 @@ impl TransportServiceApi for TransportService {
         };
         let events = node
             .resolve_events(
-                nostr::Filter::new()
+                nostr::filter::Filter::new()
                     .pubkey(company_id.npub())
-                    .kinds(vec![
-                        nostr::Kind::EncryptedDirectMessage,
-                        nostr::Kind::GiftWrap,
-                    ])
+                    .kinds(vec![nostr::event::Kind::GiftWrap])
                     .since(nostr::types::Timestamp::zero()),
             )
             .await?;
@@ -423,7 +420,7 @@ impl TransportServiceApi for TransportService {
         &self,
         file_hash: &str,
         nostr_hash: &str,
-    ) -> Result<Vec<nostr::Event>> {
+    ) -> Result<Vec<nostr::event::Event>> {
         self.nostr_transport
             .get_first_transport()
             .query_file_metadata_events(file_hash, nostr_hash)
@@ -457,6 +454,7 @@ mod tests {
     use bcr_ebill_persistence::nostr::NostrQueuedMessage;
     use bitcoin::base58;
     use mockall::predicate::eq;
+    use nostr::event::FinalizeEvent;
     use std::sync::Arc;
 
     use crate::test_utils::{
@@ -481,9 +479,9 @@ mod tests {
         }
     }
 
-    fn get_test_nostr_event() -> nostr::Event {
-        nostr::event::EventBuilder::text_note("test broadcast message")
-            .sign_with_keys(&nostr::key::Keys::generate())
+    fn get_test_nostr_event() -> nostr::event::Event {
+        nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test broadcast message")
+            .finalize(&nostr::key::Keys::generate())
             .expect("Could not create nostr test event")
     }
 
@@ -2329,7 +2327,7 @@ mod tests {
         let (service, _) = expect_service(|_, _, _, mock_queue, _, _, _, _| {
             let message_id = "test_public_message_id";
             let sender = node_id_test();
-            // Invalid JSON that can't be deserialized to nostr::Event
+            // Invalid JSON that can't be deserialized to nostr::event::Event
             let invalid_payload = "not valid json at all".to_string();
 
             let queued_message = NostrQueuedMessage {
@@ -2599,7 +2597,7 @@ mod tests {
     async fn test_process_company_historical_bill_invites_success() {
         init_test_cfg();
         let company_id = node_id_test();
-        let sender_npub = nostr::PublicKey::from_hex(
+        let sender_npub = nostr::key::PublicKey::from_hex(
             "22886f449bec154764401cfb139b80f108a39a91c7e7609f9ffd8a4592b86d38",
         )
         .unwrap();
@@ -2610,8 +2608,8 @@ mod tests {
             .with(eq(company_id.clone()))
             .returning(|_| true);
 
-        let event = nostr::event::EventBuilder::text_note("test")
-            .sign_with_keys(&nostr::key::Keys::generate())
+        let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&nostr::key::Keys::generate())
             .expect(" Could not create test event");
 
         let invite = ChainInvite::bill(bill_id_test().to_string(), BcrKeys::new());
@@ -2667,7 +2665,7 @@ mod tests {
     async fn test_process_company_historical_bill_invites_skips_non_invite() {
         init_test_cfg();
         let company_id = node_id_test();
-        let sender_npub = nostr::PublicKey::from_hex(
+        let sender_npub = nostr::key::PublicKey::from_hex(
             "22886f449bec154764401cfb139b80f108a39a91c7e7609f9ffd8a4592b86d38",
         )
         .unwrap();
@@ -2678,8 +2676,8 @@ mod tests {
             .with(eq(company_id.clone()))
             .returning(|_| true);
 
-        let event = nostr::event::EventBuilder::text_note("test")
-            .sign_with_keys(&nostr::key::Keys::generate())
+        let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&nostr::key::Keys::generate())
             .expect(" Could not create test event");
 
         let non_invite = ChainInvite::company(node_id_test().to_string(), BcrKeys::new());

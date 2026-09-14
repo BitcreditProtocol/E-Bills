@@ -1,5 +1,5 @@
+use bitcoin::secp256k1::{SECP256K1, SecretKey};
 use borsh::{BorshDeserialize, BorshSerialize};
-use secp256k1::{SECP256K1, SecretKey};
 use serde::{Deserialize, Serialize};
 
 use bcr_common::core::NodeId;

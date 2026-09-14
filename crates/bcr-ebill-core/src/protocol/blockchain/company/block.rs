@@ -17,10 +17,10 @@ use crate::protocol::{File, PostalAddress};
 use bcr_common::core::BillId;
 use bcr_common::core::NodeId;
 use bitcoin::base58;
+use bitcoin::secp256k1::{PublicKey, SecretKey};
 use borsh::{from_slice, to_vec};
 use borsh_derive::{BorshDeserialize, BorshSerialize};
 use log::{error, warn};
-use secp256k1::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 
 #[derive(BorshSerialize)]
@@ -217,7 +217,7 @@ impl Block for CompanyBlock {
     }
 
     /// We validate the plaintext hash against the plaintext data from the CompanyBlockData wrapper
-    fn validate_plaintext_hash(&self, private_key: &secp256k1::SecretKey) -> bool {
+    fn validate_plaintext_hash(&self, private_key: &bitcoin::secp256k1::SecretKey) -> bool {
         match from_slice::<CompanyBlockData>(self.data()) {
             Ok(data_wrapper) => match crypto::decrypt_ecies(&data_wrapper.data, private_key) {
                 Ok(decrypted) => self.plaintext_hash() == &Sha256Hash::from_bytes(&decrypted),
@@ -269,7 +269,7 @@ impl CompanyBlock {
         plaintext_hash: Sha256Hash,
     ) -> Result<Self> {
         // The order here is important: identity -> company
-        let keys: Vec<secp256k1::SecretKey> = vec![
+        let keys: Vec<bitcoin::secp256k1::SecretKey> = vec![
             identity_keys.get_private_key(),
             company_keys.get_private_key(),
         ];

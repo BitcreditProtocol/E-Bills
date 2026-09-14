@@ -1,4 +1,4 @@
-use secp256k1::PublicKey;
+use bitcoin::secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -114,7 +114,7 @@ pub trait Block {
     fn public_key(&self) -> &PublicKey;
     fn validate(&self) -> bool;
     fn get_block_data_to_hash(&self) -> Self::BlockDataToHash;
-    fn validate_plaintext_hash(&self, private_key: &secp256k1::SecretKey) -> bool;
+    fn validate_plaintext_hash(&self, private_key: &bitcoin::secp256k1::SecretKey) -> bool;
 
     /// Calculates the plaintext hash over the unencrypted data of the block
     fn calculate_plaintext_hash<T: BorshSerialize>(block_data: &T) -> Result<Sha256Hash> {

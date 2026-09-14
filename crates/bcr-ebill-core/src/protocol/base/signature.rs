@@ -2,7 +2,7 @@ use bitcoin::base58;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
 
-use secp256k1::{Keypair, Message, PublicKey, SECP256K1, Scalar, SecretKey, schnorr};
+use bitcoin::secp256k1::{Keypair, Message, PublicKey, SECP256K1, Scalar, SecretKey, schnorr};
 
 use crate::protocol::{ProtocolValidationError, Sha256Hash, crypto::Error as CryptoError};
 

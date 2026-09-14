@@ -20,7 +20,6 @@ use crate::data::CreateOptionalPostalAddressWeb;
 use super::{FileWeb, OptionalPostalAddressWeb};
 
 #[derive(Tsify, Debug, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct SwitchIdentity {
     pub t: Option<SwitchIdentityTypeWeb>,
     #[tsify(type = "string")]
@@ -85,7 +84,6 @@ impl From<IdentityTypeWeb> for IdentityType {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct NewIdentityPayload {
     pub t: u64,
     pub name: String,
@@ -100,7 +98,6 @@ pub struct NewIdentityPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ChangeIdentityPayload {
     pub name: Option<String>,
     pub postal_address: CreateOptionalPostalAddressWeb,
@@ -113,25 +110,21 @@ pub struct ChangeIdentityPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ConfirmEmailPayload {
     pub email: String,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct VerifyEmailPayload {
     pub confirmation_code: String,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ChangeIdentityEmailPayload {
     pub email: String,
 }
 
 #[derive(Tsify, Debug, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct IdentityWeb {
     pub t: IdentityTypeWeb,
     #[tsify(type = "string")]
@@ -182,14 +175,12 @@ impl IdentityWeb {
 
 /// Response for a private key seeed backup
 #[derive(Tsify, Debug, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct SeedPhrase {
     /// The seed phrase of the current private key
     pub seed_phrase: String,
 }
 
 #[derive(Tsify, Debug, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct ShareContactTo {
     /// The node id of the identity to share the contact details to
     #[tsify(type = "string")]
@@ -197,7 +188,6 @@ pub struct ShareContactTo {
 }
 
 #[derive(Tsify, Debug, Serialize, Deserialize)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct ShareCompanyContactTo {
     /// The node id of the identity to share the contact details to
     #[tsify(type = "string")]

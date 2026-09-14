@@ -7,7 +7,7 @@ use bcr_ebill_core::protocol::Timestamp;
 use bcr_ebill_persistence::nostr::{NostrStoreApi, SyncStatus};
 use futures::future::join_all;
 use log::{debug, error, info, warn};
-use nostr_sdk::{Filter, Kind, PublicKey};
+use nostr::{event::Kind, filter::Filter, key::PublicKey};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_with_wasm::alias as tokio;
@@ -93,7 +93,7 @@ pub async fn sync_pending_relays(
         &pending_relays,
         &source_relays,
         &all_pubkeys,
-        vec![Kind::GiftWrap, Kind::EncryptedDirectMessage],
+        vec![Kind::GiftWrap],
         FilterType::Pubkey,
         earliest_timestamp,
         nostr_store,
@@ -194,9 +194,10 @@ async fn sync_event_type_to_multiple(
     .since(since.into());
 
     // Stream events from source relays - more efficient for large result sets
-    let mut event_stream = client
+    let event_stream = client
         .stream_events_from(filter, Some(source_relays.to_vec()), None)
         .await?;
+    futures::pin_mut!(event_stream);
 
     let mut total_synced = 0;
 
@@ -268,7 +269,7 @@ async fn sync_event_type_to_multiple(
 async fn should_skip_event(
     nostr_store: &Arc<dyn NostrStoreApi>,
     relay: &url::Url,
-    event: &nostr_sdk::Event,
+    event: &nostr::event::Event,
 ) -> Result<bool> {
     if let Some(status) = nostr_store
         .get_relay_sync_status(relay)
@@ -290,6 +291,7 @@ mod tests {
 
     use bcr_common::core::NodeId;
     use mockall::predicate::eq;
+    use nostr::event::FinalizeEvent;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -486,9 +488,9 @@ mod tests {
             .returning(|_| Ok(None));
 
         let store: Arc<dyn NostrStoreApi> = Arc::new(mock_store);
-        let keys = nostr_sdk::Keys::generate();
-        let event = nostr_sdk::EventBuilder::text_note("test")
-            .sign_with_keys(&keys)
+        let keys = nostr::key::Keys::generate();
+        let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&keys)
             .unwrap();
 
         let should_skip = should_skip_event(&store, &relay, &event).await.unwrap();
@@ -523,9 +525,9 @@ mod tests {
             });
 
         let store: Arc<dyn NostrStoreApi> = Arc::new(mock_store);
-        let keys = nostr_sdk::Keys::generate();
-        let event = nostr_sdk::EventBuilder::text_note("test")
-            .sign_with_keys(&keys)
+        let keys = nostr::key::Keys::generate();
+        let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&keys)
             .unwrap();
 
         let should_skip = should_skip_event(&store, &relay, &event).await.unwrap();
@@ -560,9 +562,9 @@ mod tests {
             });
 
         let store: Arc<dyn NostrStoreApi> = Arc::new(mock_store);
-        let keys = nostr_sdk::Keys::generate();
-        let event = nostr_sdk::EventBuilder::text_note("test")
-            .sign_with_keys(&keys)
+        let keys = nostr::key::Keys::generate();
+        let event = nostr::event::EventBuilder::new(nostr::event::Kind::TextNote, "test")
+            .finalize(&keys)
             .unwrap();
 
         let should_skip = should_skip_event(&store, &relay, &event).await.unwrap();

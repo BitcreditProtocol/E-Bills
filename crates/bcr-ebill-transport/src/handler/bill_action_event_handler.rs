@@ -41,7 +41,7 @@ impl BillActionEventHandler {
         &self,
         event: &BillChainEventPayload,
         node_id: &NodeId,
-        npub: nostr::PublicKey,
+        npub: nostr::key::PublicKey,
         event_id: Option<String>,
     ) -> Result<()> {
         trace!("creating notification {event:?} for {node_id}");
@@ -171,7 +171,7 @@ impl BillActionEventHandler {
     async fn validate_chain_event_and_sender(
         &self,
         bill_id: &BillId,
-        npub: nostr::PublicKey,
+        npub: nostr::key::PublicKey,
     ) -> bool {
         if let Ok(valid) = self
             .processor
@@ -197,8 +197,8 @@ impl NotificationHandlerApi for BillActionEventHandler {
         &self,
         event: EventEnvelope,
         node_id: &NodeId,
-        sender: Option<nostr::PublicKey>,
-        evt: Option<Box<nostr::Event>>,
+        sender: Option<nostr::key::PublicKey>,
+        evt: Option<Box<nostr::event::Event>>,
     ) -> Result<()> {
         debug!("incoming bill chain event for {node_id} in action event handler");
         let event_id = evt.as_ref().map(|e| e.id.to_string());

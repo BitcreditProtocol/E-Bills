@@ -88,7 +88,11 @@ impl IdentityChainEventProcessorApi for IdentityChainEventProcessor {
         }
     }
 
-    fn validate_chain_event_and_sender(&self, node_id: &NodeId, sender: nostr::PublicKey) -> bool {
+    fn validate_chain_event_and_sender(
+        &self,
+        node_id: &NodeId,
+        sender: nostr::key::PublicKey,
+    ) -> bool {
         node_id.npub() == sender
     }
 
@@ -665,6 +669,7 @@ pub mod tests {
         protocol::{EditOptionalFieldMode, File, Name, Sha256Hash, Timestamp},
     };
     use mockall::predicate::{always, eq};
+    use nostr::event::FinalizeEvent;
 
     use crate::handler::test_utils::update_identity_block_with_name;
     use crate::test_utils::{MockContactStore, signed_identity_proof_test, test_ts};
@@ -1070,11 +1075,11 @@ pub mod tests {
 
     fn generate_test_event(
         keys: &BcrKeys,
-        previous: Option<nostr::Event>,
-        root: Option<nostr::Event>,
+        previous: Option<nostr::event::Event>,
+        root: Option<nostr::event::Event>,
         data: EventEnvelope,
         node_id: &NodeId,
-    ) -> nostr::Event {
+    ) -> nostr::event::Event {
         create_public_chain_event(
             &node_id.to_string(),
             data,
@@ -1084,7 +1089,7 @@ pub mod tests {
             root,
         )
         .expect("could not create chain event")
-        .sign_with_keys(&keys.get_nostr_keys())
+        .finalize(&keys.get_nostr_keys())
         .expect("could not sign event")
     }
 
@@ -1258,7 +1263,7 @@ pub mod tests {
             .expect_upsert()
             .withf(
                 move |hash: &Sha256Hash,
-                      _nostr_hash: &nostr::hashes::sha256::Hash,
+                      _nostr_hash: &bitcoin::hashes::sha256::Hash,
                       name: &Option<Name>,
                       server_urls: &Vec<url::Url>,
                       is_important: &Option<bool>,
@@ -1275,7 +1280,7 @@ pub mod tests {
             )
             .returning(
                 |hash: &Sha256Hash,
-                 nostr_hash: &nostr::hashes::sha256::Hash,
+                 nostr_hash: &bitcoin::hashes::sha256::Hash,
                  name: Option<Name>,
                  _: Vec<url::Url>,
                  is_important: Option<bool>,

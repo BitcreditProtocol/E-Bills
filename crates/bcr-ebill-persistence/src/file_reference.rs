@@ -6,7 +6,7 @@ use bcr_ebill_core::{
         file_reference::{FileReference, FileReferenceContext},
     },
 };
-use nostr::hashes::sha256::Hash as Sha256HexHash;
+use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 
 use super::Result;
 

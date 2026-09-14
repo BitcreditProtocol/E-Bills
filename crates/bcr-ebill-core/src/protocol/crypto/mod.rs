@@ -1,4 +1,4 @@
-use secp256k1::{PublicKey, SecretKey};
+use bitcoin::secp256k1::{PublicKey, SecretKey};
 use thiserror::Error;
 
 mod bcrkeys;
@@ -11,7 +11,7 @@ pub use bcrkeys::DeriveKeypair;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Private key error: {0}")]
-    PrivateKey(#[from] secp256k1::Error),
+    PrivateKey(#[from] bitcoin::secp256k1::Error),
 
     #[error("Ecies encryption error: {0}")]
     Ecies(String),

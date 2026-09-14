@@ -21,13 +21,11 @@ use crate::data::{
 use super::{FileWeb, PostalAddressWeb, contact::ContactTypeWeb};
 
 #[derive(Tsify, Debug, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct CompaniesResponse {
     pub companies: Vec<CompanyWeb>,
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum CompanyStatusWeb {
     Invited,
     Active,
@@ -45,7 +43,6 @@ impl From<CompanyStatus> for CompanyStatusWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct CompanyWeb {
     #[tsify(type = "string")]
     pub id: NodeId,
@@ -91,7 +88,6 @@ impl From<Company> for CompanyWeb {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub enum CompanySignatoryStatusWeb {
     Invited {
         #[tsify(type = "number")]
@@ -146,7 +142,6 @@ impl From<CompanySignatoryStatus> for CompanySignatoryStatusWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct CompanySignatoryWeb {
     #[tsify(type = "string")]
     pub node_id: NodeId,
@@ -163,14 +158,12 @@ impl From<CompanySignatory> for CompanySignatoryWeb {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct CompanyKeysWeb {
     #[tsify(type = "string")]
     pub id: NodeId,
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct CreateCompanyPayload {
     pub id: String,
     pub name: String,
@@ -186,7 +179,6 @@ pub struct CreateCompanyPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct EditCompanyPayload {
     #[tsify(type = "string")]
     pub id: NodeId,
@@ -202,7 +194,6 @@ pub struct EditCompanyPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct InviteSignatoryPayload {
     #[tsify(type = "string")]
     pub id: NodeId,
@@ -211,7 +202,6 @@ pub struct InviteSignatoryPayload {
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct RemoveSignatoryPayload {
     #[tsify(type = "string")]
     pub id: NodeId,
@@ -220,13 +210,11 @@ pub struct RemoveSignatoryPayload {
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct ListSignatoriesResponse {
     pub signatories: Vec<SignatoryResponse>,
 }
 
 #[derive(Tsify, Debug, Serialize, Clone)]
-#[tsify(into_wasm_abi)]
 pub struct SignatoryResponse {
     pub t: ContactTypeWeb,
     #[tsify(type = "string")]
@@ -259,42 +247,36 @@ impl TryFrom<(CompanySignatory, Contact)> for SignatoryResponse {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ResyncCompanyPayload {
     #[tsify(type = "string")]
     pub node_id: NodeId,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ChangeSignatoryEmailPayload {
     pub id: String,
     pub email: String,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct ConfirmEmailPayload {
     pub id: String,
     pub email: String,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct VerifyEmailPayload {
     pub id: String,
     pub confirmation_code: String,
 }
 
 #[derive(Tsify, Debug, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct AcceptCompanyInvitePayload {
     pub id: String,
     pub email: String,
 }
 
 #[derive(Tsify, Debug, Deserialize, Clone)]
-#[tsify(from_wasm_abi)]
 pub struct LocallyHideSignatoryPayload {
     pub id: String,
     pub signatory_node_id: String,

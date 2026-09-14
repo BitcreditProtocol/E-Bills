@@ -165,8 +165,8 @@ pub mod tests {
             async fn update_relay_sync_status(&self, relay: &url::Url, status: SyncStatus) -> Result<()>;
             async fn update_relay_sync_progress(&self, relay: &url::Url, timestamp: bcr_ebill_core::protocol::Timestamp) -> Result<()>;
             async fn update_relay_last_seen(&self, relay: &url::Url, timestamp: bcr_ebill_core::protocol::Timestamp) -> Result<()>;
-            async fn add_failed_relay_sync(&self, relay: &url::Url, event: nostr::Event) -> Result<()>;
-            async fn get_pending_relay_retries(&self, relay: &url::Url, limit: usize) -> Result<Vec<nostr::Event>>;
+            async fn add_failed_relay_sync(&self, relay: &url::Url, event: nostr::event::Event) -> Result<()>;
+            async fn get_pending_relay_retries(&self, relay: &url::Url, limit: usize) -> Result<Vec<nostr::event::Event>>;
             async fn mark_relay_retry_success(&self, relay: &url::Url, event_id: &str) -> Result<()>;
             async fn mark_relay_retry_failed(&self, relay: &url::Url, event_id: &str, max_retries: usize) -> Result<()>;
         }
@@ -490,20 +490,20 @@ pub mod tests {
             async fn upsert(
                 &self,
                 hash: &Sha256Hash,
-                nostr_hash: &nostr::hashes::sha256::Hash,
+                nostr_hash: &bitcoin::hashes::sha256::Hash,
                 name: Option<Name>,
                 server_urls: Vec<url::Url>,
                 is_important: Option<bool>,
                 context: Vec<bcr_ebill_core::protocol::file_reference::FileReferenceContext>,
             ) -> bcr_ebill_persistence::Result<bcr_ebill_core::protocol::file_reference::FileReference>;
             async fn get(&self, hash: &Sha256Hash) -> bcr_ebill_persistence::Result<Option<bcr_ebill_core::protocol::file_reference::FileReference>>;
-            async fn find_by_nostr_hash(&self, nostr_hash: &nostr::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<Option<bcr_ebill_core::protocol::file_reference::FileReference>>;
+            async fn find_by_nostr_hash(&self, nostr_hash: &bitcoin::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<Option<bcr_ebill_core::protocol::file_reference::FileReference>>;
             async fn delete(&self, hash: &Sha256Hash) -> bcr_ebill_persistence::Result<()>;
             async fn list(&self) -> bcr_ebill_persistence::Result<Vec<bcr_ebill_core::protocol::file_reference::FileReference>>;
             async fn list_important(&self) -> bcr_ebill_persistence::Result<Vec<bcr_ebill_core::protocol::file_reference::FileReference>>;
             async fn add_server_urls(&self, hash: &Sha256Hash, urls: Vec<url::Url>) -> bcr_ebill_persistence::Result<bool>;
             async fn mark_important(&self, hash: &Sha256Hash, important: bool) -> bcr_ebill_persistence::Result<()>;
-            async fn update_nostr_hash(&self, hash: &Sha256Hash, nostr_hash: &nostr::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<()>;
+            async fn update_nostr_hash(&self, hash: &Sha256Hash, nostr_hash: &bitcoin::hashes::sha256::Hash) -> bcr_ebill_persistence::Result<()>;
             async fn add_context(&self, hash: &Sha256Hash, context: bcr_ebill_core::protocol::file_reference::FileReferenceContext) -> bcr_ebill_persistence::Result<bool>;
             async fn remove_context(&self, hash: &Sha256Hash, context: &bcr_ebill_core::protocol::file_reference::FileReferenceContext) -> bcr_ebill_persistence::Result<bool>;
         }
@@ -706,8 +706,8 @@ pub mod tests {
             .unwrap()
     }
 
-    pub fn private_key_test_another() -> secp256k1::SecretKey {
-        secp256k1::SecretKey::from_str(
+    pub fn private_key_test_another() -> bitcoin::secp256k1::SecretKey {
+        bitcoin::secp256k1::SecretKey::from_str(
             "f50032a6a67bc86f9542e74b7becc31847ff94d74e7760dcb797435d45463345",
         )
         .unwrap()

@@ -41,7 +41,6 @@ pub enum WasmError {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 enum JsErrorType {
     FieldEmpty,
     FieldInvalid,
@@ -160,7 +159,6 @@ enum JsErrorType {
 }
 
 #[derive(Tsify, Debug, Clone, Serialize)]
-#[tsify(into_wasm_abi)]
 pub struct JsErrorData {
     error: JsErrorType,
     message: String,

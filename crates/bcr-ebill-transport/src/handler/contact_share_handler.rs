@@ -51,8 +51,8 @@ impl NotificationHandlerApi for ContactShareEventHandler {
         &self,
         event: EventEnvelope,
         node_id: &NodeId,
-        sender: Option<nostr::PublicKey>,
-        _: Option<Box<nostr::Event>>,
+        sender: Option<nostr::key::PublicKey>,
+        _: Option<Box<nostr::event::Event>>,
     ) -> Result<()> {
         debug!("incoming contact share for {node_id}");
         if let Ok(decoded) = Event::<ContactShareEvent>::try_from(event.clone()) {
@@ -213,7 +213,7 @@ impl ContactShareEventHandler {
         &self,
         share_event: &ContactShareEvent,
         node_id: &NodeId,
-        _sender: Option<nostr::PublicKey>,
+        _sender: Option<nostr::key::PublicKey>,
     ) -> Result<()> {
         if let Ok(Some(contact_data)) = self.transport.resolve_contact(&share_event.node_id).await
             && let Some(bcr_metadata) = contact_data.get_bcr_metadata()
@@ -692,12 +692,12 @@ mod tests {
                     identification_number: None,
                     avatar_file: Some(File {
                         hash: Sha256Hash::new("avatar_data"),
-                        nostr_hash: nostr::hashes::sha256::Hash::const_hash(&[2u8; 32]),
+                        nostr_hash: bitcoin::hashes::sha256::Hash::const_hash(&[2u8; 32]),
                         name: Name::new("avatar.png").unwrap(),
                     }),
                     proof_document_file: Some(File {
                         hash: Sha256Hash::new("proof_data"),
-                        nostr_hash: nostr::hashes::sha256::Hash::const_hash(&[4u8; 32]),
+                        nostr_hash: bitcoin::hashes::sha256::Hash::const_hash(&[4u8; 32]),
                         name: Name::new("proof.pdf").unwrap(),
                     }),
                     nostr_relays: vec![],
@@ -760,7 +760,7 @@ mod tests {
             .returning(|_, _, _, _, _, _| {
                 Ok(FileReference {
                     hash: Sha256Hash::new("avatar_data"),
-                    nostr_hash: nostr::hashes::sha256::Hash::const_hash(&[2u8; 32]),
+                    nostr_hash: bitcoin::hashes::sha256::Hash::const_hash(&[2u8; 32]),
                     name: Some(Name::new("avatar.png").unwrap()),
                     server_urls: vec![],
                     is_important: true,
@@ -786,7 +786,7 @@ mod tests {
             .returning(|_, _, _, _, _, _| {
                 Ok(FileReference {
                     hash: Sha256Hash::new("proof_data"),
-                    nostr_hash: nostr::hashes::sha256::Hash::const_hash(&[4u8; 32]),
+                    nostr_hash: bitcoin::hashes::sha256::Hash::const_hash(&[4u8; 32]),
                     name: Some(Name::new("proof.pdf").unwrap()),
                     server_urls: vec![],
                     is_important: true,

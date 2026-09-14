@@ -25,8 +25,8 @@ use bcr_ebill_core::protocol::{BitcoinAddress, BlockId, Sha256Hash};
 use bcr_ebill_persistence::{
     FileReferenceStoreApi, NostrChainEventStoreApi, bill::BillChainStoreApi, bill::BillStoreApi,
 };
+use bitcoin::secp256k1::PublicKey;
 use log::{debug, error, info, warn};
-use secp256k1::PublicKey;
 use std::sync::Arc;
 
 use super::inbound_file_anchor::{anchor_important_file, bill_file_context};
@@ -70,7 +70,7 @@ impl BillChainEventProcessorApi for BillChainEventProcessor {
     async fn validate_chain_event_and_sender(
         &self,
         bill_id: &BillId,
-        sender: nostr::PublicKey,
+        sender: nostr::key::PublicKey,
     ) -> Result<bool> {
         if let (Ok(bill_keys), Ok(chain)) = (
             self.bill_store.get_keys(bill_id).await,
@@ -81,7 +81,7 @@ impl BillChainEventProcessorApi for BillChainEventProcessor {
                 .map_err(|e| Error::Blockchain(e.to_string()))?
                 .iter()
                 .map(|p| p.npub())
-                .collect::<Vec<nostr::PublicKey>>();
+                .collect::<Vec<nostr::key::PublicKey>>();
 
             Ok(participants.contains(&sender))
         } else {
@@ -846,8 +846,9 @@ mod tests {
         file_reference::{FileReference, FileReferenceContext},
     };
     use bitcoin::PrivateKey;
+    use bitcoin::secp256k1::{SECP256K1, SecretKey};
     use mockall::predicate::{always, eq};
-    use secp256k1::{SECP256K1, SecretKey};
+    use nostr::event::FinalizeEvent;
     use std::str::FromStr;
 
     use crate::{
@@ -1252,11 +1253,11 @@ mod tests {
 
     fn generate_test_event(
         keys: &BcrKeys,
-        previous: Option<nostr::Event>,
-        root: Option<nostr::Event>,
+        previous: Option<nostr::event::Event>,
+        root: Option<nostr::event::Event>,
         data: EventEnvelope,
         bill_id: &BillId,
-    ) -> nostr::Event {
+    ) -> nostr::event::Event {
         create_public_chain_event(
             &bill_id.to_string(),
             data,
@@ -1266,7 +1267,7 @@ mod tests {
             root,
         )
         .expect("could not create chain event")
-        .sign_with_keys(&keys.get_nostr_keys())
+        .finalize(&keys.get_nostr_keys())
         .expect("could not sign event")
     }
 
@@ -2321,7 +2322,7 @@ mod tests {
             .expect_upsert()
             .withf(
                 move |hash: &Sha256Hash,
-                      _nostr_hash: &nostr::hashes::sha256::Hash,
+                      _nostr_hash: &bitcoin::hashes::sha256::Hash,
                       name: &Option<Name>,
                       server_urls: &Vec<url::Url>,
                       is_important: &Option<bool>,
@@ -2339,7 +2340,7 @@ mod tests {
             )
             .returning(
                 |hash: &Sha256Hash,
-                 nostr_hash: &nostr::hashes::sha256::Hash,
+                 nostr_hash: &bitcoin::hashes::sha256::Hash,
                  name: Option<Name>,
                  _: Vec<url::Url>,
                  is_important: Option<bool>,

@@ -124,9 +124,9 @@ let config = {
   bitcoin_network: "testnet",
   esplora_base_url: "https://esplora.minibill.tech",
   // nostr_relays: ["ws://localhost:8080"],
-  nostr_relays: ["wss://relay.wildcat0.clowder-dev.minibill.tech"],
+  nostr_relays: ["wss://relay.wildcat0.clowder-dev.minibill.tech", "wss://relay.wildcat1.clowder-dev.minibill.tech"],
   // this would be the default with current relay config
-  blossom_servers: ["https://relay.wildcat0.clowder-dev.minibill.tech"],
+  blossom_servers: ["https://relay.wildcat0.clowder-dev.minibill.tech", "https://relay.wildcat1.clowder-dev.minibill.tech"],
   // if set to true we will drop DMs from nostr that we don't have in contacts
   nostr_only_known_contacts: false,
   job_runner_initial_delay_seconds: 5,

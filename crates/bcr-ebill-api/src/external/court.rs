@@ -4,9 +4,9 @@ use bcr_ebill_core::{
     protocol::crypto::BcrKeys,
 };
 use bitcoin::hashes::{Hash, sha256::Hash as Sha256};
+use bitcoin::secp256k1::{Message, PublicKey, SECP256K1};
 use borsh::to_vec;
 use borsh_derive::BorshSerialize;
-use secp256k1::{Message, PublicKey, SECP256K1};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -21,7 +21,7 @@ pub enum Error {
     Api(#[from] reqwest::Error),
     /// all signature errors
     #[error("External Court Signature Error: {0}")]
-    Signature(#[from] secp256k1::Error),
+    Signature(#[from] bitcoin::secp256k1::Error),
     /// all borsh errors
     #[error("External Court Borsh Error")]
     Borsh(#[from] borsh::io::Error),

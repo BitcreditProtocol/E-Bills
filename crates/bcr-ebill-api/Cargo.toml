@@ -10,7 +10,6 @@ doctest = false
 [dependencies]
 borsh.workspace = true
 borsh-derive.workspace = true
-chrono.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
 serde.workspace = true
@@ -23,14 +22,13 @@ bitcoin.workspace = true
 miniscript.workspace = true
 nostr.workspace = true
 futures.workspace = true
-infer = { version = "0.19.0", default-features = false }
+infer = { version = "0.22.0", default-features = false }
 bcr-ebill-core.workspace = true
 bcr-ebill-persistence.workspace = true
 bcr-common.workspace = true
 tokio.workspace = true
 tokio_with_wasm.workspace = true
-secp256k1.workspace = true
-rand = { version = "0.9" }
+rand = { version = "0.10" }
 strum.workspace = true
 hex = { version = "0.4" }
 url.workspace = true
