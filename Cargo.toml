@@ -57,7 +57,7 @@ getrandom = "0.4.3"
 async-broadcast = "0.7.2"
 rstest = "0.26"
 reqwest = { version = "0.13", default-features = false }
-miniscript = { version = "12.3" }
+miniscript = { version = "13.1" }
 base64 = "0.23"
 mockall = "0.13.1"
 bcr-ebill-core = { path = "./crates/bcr-ebill-core" }
