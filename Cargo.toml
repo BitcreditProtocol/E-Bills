@@ -59,7 +59,7 @@ rstest = "0.26"
 reqwest = { version = "0.13", default-features = false }
 miniscript = { version = "12.3" }
 base64 = "0.23"
-mockall = "0.13.1"
+mockall = "0.15.0"
 bcr-ebill-core = { path = "./crates/bcr-ebill-core" }
 bcr-ebill-api = { path = "./crates/bcr-ebill-api" }
 bcr-ebill-persistence = { path = "./crates/bcr-ebill-persistence" }
