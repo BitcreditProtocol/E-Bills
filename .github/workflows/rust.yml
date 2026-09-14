@@ -31,6 +31,7 @@ jobs:
         with:
           app-id: ${{ vars.PRIVATE_REPO_ACCESS_APP_ID }}
           private-key: ${{ secrets.PRIVATE_REPO_ACCESS_APP_PRIVATE_KEY }}
+          permission-contents: read
           owner: BitcreditProtocol
       
       - name: Git auth with app token
@@ -95,9 +96,16 @@ jobs:
           cargo install wasm-pack --version 0.14.0
 
       - name: Build WASM version
+        env:
+          RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
         run: |
           cd crates/bcr-ebill-wasm
-          wasm-pack build --target web
+          wasm-pack build --target web --scope bitcredit --out-name index
+
+      - name: Verify release package without publishing
+        run: |
+          cp LICENSE crates/bcr-ebill-wasm/pkg/
+          python3 .github/scripts/release_wasm.py prepare "$RUNNER_TEMP/wasm-package-check" crates/bcr-ebill-wasm/pkg
 
       - name: Upload analysis results to GitHub
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4

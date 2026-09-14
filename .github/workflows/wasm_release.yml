@@ -8,6 +8,10 @@ on:
         required: false
         default: ""
 
+concurrency:
+  group: release-wasm
+  cancel-in-progress: false
+
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
@@ -21,10 +25,11 @@ jobs:
       contents: write
       packages: write
       id-token: write
+      actions: read
 
     environment: release-wasm
 
-    # Restrict execution to specific users
+    # Preserve the existing initiator restriction.
     if: contains(fromJson('["mtbitcr", "zupzup", "tompro", "cleot"]'), github.actor)
 
     steps:
@@ -33,92 +38,68 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create Github App token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ vars.PRIVATE_REPO_ACCESS_APP_ID }}
-          private-key: ${{ secrets.PRIVATE_REPO_ACCESS_APP_PRIVATE_KEY }}
-          owner: BitcreditProtocol
-      
-      - name: Git auth with app token
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
-
-      - name: Extract version from Cargo.toml
-        id: get_version
-        run: |
-          VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f2)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Detected version: v$VERSION"
-
-      - name: Ensure tag does not already exist
-        run: |
-          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
-            echo "Error: Tag v${{ env.VERSION }} already exists!"
-            exit 1
-          fi
-
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.12.0
           registry-url: "https://registry.npmjs.org"
 
+      - name: Restore the original package if it was prepared
+        id: package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release_wasm.py restore "$RUNNER_TEMP/release-package"
+
+      - name: Create Github App token
+        if: steps.package.outputs.restored != 'true'
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.PRIVATE_REPO_ACCESS_APP_ID }}
+          private-key: ${{ secrets.PRIVATE_REPO_ACCESS_APP_PRIVATE_KEY }}
+          permission-contents: read
+          owner: BitcreditProtocol
+
+      - name: Git auth with app token
+        if: steps.package.outputs.restored != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+
       - name: Install Rust toolchain
+        if: steps.package.outputs.restored != 'true'
         uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           toolchain: stable
 
       - name: Install wasm-pack
-        run: |
-          cargo install wasm-pack --version 0.14.0
+        if: steps.package.outputs.restored != 'true'
+        run: cargo install wasm-pack --version 0.14.0
 
-      - name: Build with wasm-pack
+      - name: Build and prepare immutable WASM package
+        if: steps.package.outputs.restored != 'true'
         env:
           RUSTFLAGS: '--cfg getrandom_backend="wasm_js"'
+          RELEASE_CHANGELOG: ${{ inputs.changelog }}
         run: |
           cd crates/bcr-ebill-wasm
           wasm-pack build --target web --scope bitcredit --out-name index
-
-      - name: Copy LICENSE into pkg/
-        run: |
+          cd ../..
           cp LICENSE crates/bcr-ebill-wasm/pkg/
+          python3 .github/scripts/release_wasm.py prepare "$RUNNER_TEMP/release-package" crates/bcr-ebill-wasm/pkg
 
-      - name: Create and push git tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "v${{ env.VERSION }}"
-          git push origin "v${{ env.VERSION }}"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      - name: Save the package before any publication writes
+        if: steps.package.outputs.restored != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          tag_name: v${{ env.VERSION }}
-          name: v${{ env.VERSION }}
-          body: |
-            ${{ inputs.changelog }}
+          name: release-package
+          path: ${{ runner.temp }}/release-package/
+          retention-days: 90
+          overwrite: false
+          if-no-files-found: error
 
-            **Version:** v${{ env.VERSION }}
-          draft: false
-          prerelease: false
-
-      - name: Upload WASM artifacts to Release
+      - name: Reconcile tag, assets, npm package and final release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          cd crates/bcr-ebill-wasm/pkg
-          for file in *; do
-            if [[ "$file" != ".gitignore" ]]; then
-              gh release upload "v${{ env.VERSION }}" "$file"
-            fi
-          done
-
-      - name: Publish to npm
-        run: |
-          cd crates/bcr-ebill-wasm/pkg
-          npm publish --access public --provenance --tag latest
-
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release_wasm.py publish "$RUNNER_TEMP/release-package"

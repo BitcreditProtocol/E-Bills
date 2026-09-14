@@ -1,0 +1,30 @@
+name: WASM release regression checks
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/release_wasm.py'
+      - '.github/scripts/test_release_wasm.py'
+      - '.github/workflows/wasm_release.yml'
+      - '.github/workflows/test-wasm-release.yml'
+  push:
+    branches: [master]
+    paths:
+      - '.github/scripts/release_wasm.py'
+      - '.github/scripts/test_release_wasm.py'
+      - '.github/workflows/wasm_release.yml'
+      - '.github/workflows/test-wasm-release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.12.0
+      - run: python3 .github/scripts/test_release_wasm.py
