@@ -18,8 +18,8 @@ use crate::{
     },
     util::get_uuid_v4,
 };
-use bcr_common::{cashu::nut02 as cdk02, ecash};
 use bcr_common::wire::quotes::{ApplicantActionKind, ApplicantActionProjection};
+use bcr_common::{cashu::nut02 as cdk02, ecash};
 use bcr_ebill_core::{
     application::{
         ValidationError,
@@ -59,7 +59,10 @@ use mockall::predicate::{always, eq, function};
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 use test_utils::{
@@ -86,7 +89,7 @@ fn stale_applicant_action_is_discarded_for_terminal_quote_status() {
     assert_eq!(
         authoritative_applicant_action_for_status(
             &QuoteStatusReply::Denied {
-                tstamp: DateTimeUtc::default(),
+                tstamp: DateTimeUtc::UNIX_EPOCH,
             },
             Some(action.clone()),
         ),
@@ -7658,7 +7661,7 @@ async fn notification_failure_does_not_block_authoritative_mint_state_update() {
         .expect_lookup_quote_for_mint()
         .returning(|_, _| {
             Ok(QuoteStatusReply::Denied {
-                tstamp: DateTimeUtc::default(),
+                tstamp: DateTimeUtc::UNIX_EPOCH,
             }
             .into())
         });
@@ -7890,12 +7893,12 @@ async fn check_mint_state_offered_accepted() {
     assert!(res.is_ok());
 }
 
-fn minting_test_keyset() -> cdk02::KeySet {
+fn minting_test_keyset() -> ecash::KeySet {
     let public_key = bcr_common::cashu::PublicKey::from_hex(
         BcrKeys::from_private_key(&private_key_test()).get_public_key(),
     )
     .unwrap();
-    cdk02::KeySet {
+    ecash::KeySet {
         id: cdk02::Id::try_from("00c7b45973e5f0fc".to_owned()).unwrap(),
         unit: bcr_common::cashu::CurrencyUnit::Sat,
         keys: bcr_common::cashu::Keys::new(

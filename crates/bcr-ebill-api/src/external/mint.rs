@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::str::FromStr;
 use thiserror::Error;
+use time::Duration;
 use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
@@ -447,11 +448,17 @@ fn parse_quote_reissue_permit(
     let signed: SignedCreditQuoteReissuePermit =
         serde_json::from_str(value).map_err(|_| Error::InvalidQuoteReissuePermit)?;
     let permit = &signed.permit;
-    let issued_at = chrono::DateTime::parse_from_rfc3339(&permit.issued_at)
-        .map_err(|_| Error::InvalidQuoteReissuePermit)?;
-    let expires_at = chrono::DateTime::parse_from_rfc3339(&permit.expires_at)
-        .map_err(|_| Error::InvalidQuoteReissuePermit)?;
-    let now = Utc::now();
+    let issued_at = time::OffsetDateTime::parse(
+        &permit.issued_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map_err(|_| Error::InvalidQuoteReissuePermit)?;
+    let expires_at = time::OffsetDateTime::parse(
+        &permit.expires_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map_err(|_| Error::InvalidQuoteReissuePermit)?;
+    let now = time::OffsetDateTime::now_utc();
     let text_fields = [
         permit.key_id.as_str(),
         permit.mint_id.as_str(),
@@ -480,8 +487,20 @@ fn parse_quote_reissue_permit(
         || permit.bill_id != expected_bill_id.to_string()
         || expected_holder_ref.is_some_and(|holder| permit.holder_ref != holder.to_string())
         || permit.previous_mint_quote_id == permit.reissued_mint_quote_id
-        || issued_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true) != permit.issued_at
-        || expires_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true) != permit.expires_at
+        || issued_at
+            .to_offset(time::UtcOffset::UTC)
+            .format(&time::macros::format_description!(
+                "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+            ))
+            .expect("complete UTC timestamp has every fixed format component")
+            != permit.issued_at
+        || expires_at
+            .to_offset(time::UtcOffset::UTC)
+            .format(&time::macros::format_description!(
+                "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+            ))
+            .expect("complete UTC timestamp has every fixed format component")
+            != permit.expires_at
         || expires_at <= issued_at
         || expires_at - issued_at > MAX_REISSUE_PERMIT_TTL
         || issued_at > now + REISSUE_PERMIT_CLOCK_SKEW
@@ -859,7 +878,7 @@ pub fn generate_blind(
 /// Recreate an interrupted issuance's exact blinds with the existing Cashu primitive.
 /// Never replace malformed recovery data with fresh secrets.
 pub(crate) fn recover_blinds(
-    keyset: &cdk02::KeySet,
+    keyset: &ecash::KeySet,
     discounted_amount: Sum,
     recovery: &bcr_ebill_core::protocol::mint::MintOfferRecoveryData,
 ) -> Result<(
@@ -1165,13 +1184,23 @@ mod quote_reissue_tests {
         }
 
         let mut future: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let issued_at = Utc::now() + Duration::minutes(5);
+        let issued_at = time::OffsetDateTime::now_utc() + Duration::minutes(5);
         let expires_at = issued_at + Duration::minutes(15);
         future["permit"]["issuedAt"] = serde_json::Value::String(
-            issued_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            issued_at
+                .to_offset(time::UtcOffset::UTC)
+                .format(&time::macros::format_description!(
+                    "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+                ))
+                .expect("complete UTC timestamp has every fixed format component"),
         );
         future["permit"]["expiresAt"] = serde_json::Value::String(
-            expires_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            expires_at
+                .to_offset(time::UtcOffset::UTC)
+                .format(&time::macros::format_description!(
+                    "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+                ))
+                .expect("complete UTC timestamp has every fixed format component"),
         );
         assert!(
             parse_quote_reissue_permit(&future.to_string(), &request.content.bill_id, None)
