@@ -21,7 +21,7 @@ thiserror.workspace = true
 uuid.workspace = true
 bitcoin.workspace = true
 miniscript.workspace = true
-nostr.workspace = true
+nostr = { workspace = true, features = ["os-rng"] }
 futures.workspace = true
 infer = { version = "0.22.0", default-features = false }
 bcr-ebill-core.workspace = true
