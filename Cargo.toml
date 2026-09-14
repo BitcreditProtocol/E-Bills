@@ -55,7 +55,7 @@ nostr = { version = "0.45", features = ["nip59"] }
 nostr-sdk = { version = "0.45" }
 getrandom = "0.4.3"
 async-broadcast = "0.7.2"
-rstest = "0.26"
+rstest = "0.27"
 reqwest = { version = "0.13", default-features = false }
 miniscript = { version = "12.3" }
 base64 = "0.23"
