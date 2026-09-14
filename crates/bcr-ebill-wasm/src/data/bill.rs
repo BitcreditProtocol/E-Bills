@@ -237,14 +237,12 @@ pub struct ResyncBillPayload {
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct OverrideBillFromNostrPayload {
     #[tsify(type = "string")]
     pub bill_id: BillId,
 }
 
 #[derive(Tsify, Debug, Clone, Deserialize)]
-#[tsify(from_wasm_abi)]
 pub struct BillResetMintQuoteState {
     #[tsify(type = "string")]
     pub bill_id: BillId,

@@ -37,3 +37,6 @@ surrealdb = { workspace = true, default-features = false, features = ["protocol-
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 surrealdb = { workspace = true, default-features = false, features = ["kv-mem"] }
+
+[dev-dependencies]
+nostr_043 = { package = "nostr", version = "=0.43.1" } # for backwards-compat testing

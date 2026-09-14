@@ -7,6 +7,7 @@
 * Fix flaky test
 * Remove deprecated nip04 code
 * Migrate from `chrono` to `time`
+* Fix backwards-compat issue introduced by the Nostr 0.45 upgrade - `nostr::event::Signature` on `nostr::event::Event` is serialized differently. We use a custom serialization type now.
 
 # 0.5.15-hotfix1
 
