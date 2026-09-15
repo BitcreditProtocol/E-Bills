@@ -74,6 +74,31 @@ impl MintStoreApi for SurrealMintStore {
         }
     }
 
+    async fn dev_mode_reset_for_bill(&self, bill_id: &BillId) -> Result<()> {
+        let mut bindings = Bindings::default();
+        bindings.add("requests_table", Self::REQUESTS_TABLE)?;
+        bindings.add("offers_table", Self::OFFERS_TABLE)?;
+        bindings.add(DB_BILL_ID, bill_id.to_owned())?;
+
+        // Offers only know the mint_request_id, so remove offers belonging
+        // to requests for this bill first.
+        self.db
+            .query_check(
+                "DELETE FROM type::table($offers_table) WHERE mint_request_id IN (SELECT VALUE mint_request_id FROM type::table($requests_table) WHERE bill_id = $bill_id)",
+                bindings.clone(),
+            )
+            .await?;
+
+        self.db
+            .query_check(
+                "DELETE FROM type::table($requests_table) WHERE bill_id = $bill_id",
+                bindings,
+            )
+            .await?;
+
+        Ok(())
+    }
+
     async fn get_all_active_requests(&self) -> Result<Vec<MintRequest>> {
         let mut bindings = Bindings::default();
         bindings.add(DB_TABLE, Self::REQUESTS_TABLE)?;
@@ -686,5 +711,36 @@ mod tests {
             .unwrap();
         let offer = offer_store.get_offer(&id).await.unwrap();
         assert!(offer.as_ref().unwrap().proofs_spent);
+    }
+
+    #[tokio::test]
+    async fn test_dev_mode_reset_for_bill_deletes_requests_and_offers() {
+        let store = get_requests_store().await;
+        let id = get_uuid_v4();
+        let bill_id = bill_id_test();
+
+        store
+            .add_request(
+                &node_id_test(),
+                &bill_id,
+                &node_id_test_other(),
+                &id,
+                test_ts(),
+            )
+            .await
+            .unwrap();
+
+        store
+            .add_offer(&id, "keyset_id", test_ts(), Sum::new_sat(1500).unwrap())
+            .await
+            .unwrap();
+
+        assert!(store.get_request(&id).await.unwrap().is_some());
+        assert!(store.get_offer(&id).await.unwrap().is_some());
+
+        store.dev_mode_reset_for_bill(&bill_id).await.unwrap();
+
+        assert!(store.get_request(&id).await.unwrap().is_none());
+        assert!(store.get_offer(&id).await.unwrap().is_none());
     }
 }

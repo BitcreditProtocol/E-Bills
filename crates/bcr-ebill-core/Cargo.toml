@@ -13,7 +13,6 @@ borsh-derive.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 serde_repr.workspace = true
-chrono.workspace = true
 uuid.workspace = true
 log.workspace = true
 thiserror.workspace = true
@@ -29,6 +28,7 @@ ammonia = "4"
 email_address = { version = "0.2", default-features = false }
 rust_decimal = "1.43"
 once_cell = "1.21.3"
+time.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

@@ -236,6 +236,18 @@ pub struct ResyncBillPayload {
     pub from_nostr: Option<bool>,
 }
 
+#[derive(Tsify, Debug, Clone, Deserialize)]
+pub struct OverrideBillFromNostrPayload {
+    #[tsify(type = "string")]
+    pub bill_id: BillId,
+}
+
+#[derive(Tsify, Debug, Clone, Deserialize)]
+pub struct BillResetMintQuoteState {
+    #[tsify(type = "string")]
+    pub bill_id: BillId,
+}
+
 impl From<BillCombinedBitcoinKey> for BillCombinedBitcoinKeyWeb {
     fn from(val: BillCombinedBitcoinKey) -> Self {
         BillCombinedBitcoinKeyWeb {

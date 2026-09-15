@@ -510,7 +510,7 @@ mockall::mock! {
         async fn send_identity_chain_events(&self, events: IdentityChainEvent) -> Result<()>;
         async fn send_company_chain_events(&self, events: CompanyChainEvent) -> Result<()>;
         async fn send_bill_chain_events(&self, events: BillChainEvent) -> Result<()>;
-        async fn resync_bill_chain(&self, bill_id: &BillId, from_nostr: bool) -> Result<()>;
+        async fn resync_bill_chain(&self, bill_id: &BillId, from_nostr: bool, mode: bcr_ebill_api::service::transport_service::ResyncMode) -> Result<()>;
         async fn resync_company_chain(&self, company_id: &NodeId) -> Result<()>;
         async fn resync_identity_chain(&self) -> Result<()>;
         async fn validate_bill_blocks_exist_on_nostr_chain(

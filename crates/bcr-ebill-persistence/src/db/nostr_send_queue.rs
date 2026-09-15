@@ -8,6 +8,7 @@ use bcr_common::core::NodeId;
 use bcr_ebill_core::{application::ServiceTraitBounds, protocol::DateTimeUtc, protocol::Timestamp};
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
+use time::{UtcOffset, format_description::well_known::Rfc3339};
 
 use crate::nostr::{NostrQueuedMessage, NostrQueuedMessageStoreApi};
 
@@ -31,7 +32,7 @@ impl SurrealNostrEventQueueStore {
         let mut bindings = Bindings::default();
         bindings.add(DB_TABLE, Self::TABLE)?;
         bindings.add(DB_IDS, ids)?;
-        bindings.add("started_at", started_at)?;
+        bindings.add("started_at", datetime_db_value(started_at))?;
         self.db
             .query_check(
                 "UPDATE type::table($table) SET processing_started_at = $started_at WHERE id IN $ids",
@@ -68,7 +69,7 @@ impl NostrQueuedMessageStoreApi for SurrealNostrEventQueueStore {
         bindings.add(DB_LIMIT, limit)?;
         bindings.add(
             "retry_before",
-            Timestamp::new(retry_before).expect("safe").to_datetime(),
+            datetime_db_value(Timestamp::new(retry_before).expect("safe").to_datetime()),
         )?;
         let items: Vec<QueuedMessageDb> = self
             .db
@@ -118,11 +119,14 @@ struct QueuedMessageDb {
     #[serde(alias = "node_id")]
     pub recipient: Option<NodeId>,
     pub payload: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub created: DateTimeUtc,
+    #[serde(with = "time::serde::rfc3339")]
     pub last_try: DateTimeUtc,
     pub num_retries: i32,
     pub max_retries: i32,
     pub completed: bool,
+    #[serde(with = "time::serde::rfc3339")]
     pub processing_started_at: DateTimeUtc,
 }
 
@@ -155,6 +159,12 @@ impl From<QueuedMessageDb> for NostrQueuedMessage {
             payload: value.payload,
         }
     }
+}
+
+fn datetime_db_value(dt: DateTimeUtc) -> String {
+    dt.to_offset(UtcOffset::UTC)
+        .format(&Rfc3339)
+        .expect("datetime can be formatted as RFC3339")
 }
 
 #[cfg(test)]
@@ -295,7 +305,10 @@ mod tests {
             )
             .expect("could not bind ids");
         bindings
-            .add("started_at", Timestamp::zero().to_datetime())
+            .add(
+                "started_at",
+                datetime_db_value(Timestamp::zero().to_datetime()),
+            )
             .expect("could not bind started_at");
         store
             .db

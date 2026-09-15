@@ -1,11 +1,13 @@
 use crate::handler::public_chain_helpers::{
-    BlockData, EventContainer, is_fork_block, resolve_event_chains, resolve_fork,
+    BlockData, EventContainer, find_first_difference, is_fork_block, resolve_event_chains,
+    resolve_fork,
 };
 use crate::{Error, Result};
 use async_trait::async_trait;
 use bcr_common::core::BillId;
 use bcr_ebill_api::external::mint::MintClientApi;
 use bcr_ebill_api::get_config;
+use bcr_ebill_api::service::transport_service::ResyncMode;
 use bcr_ebill_api::service::transport_service::transport_client::TransportClientApi;
 use bcr_ebill_core::application::ServiceTraitBounds;
 use bcr_ebill_core::protocol::Validate;
@@ -103,7 +105,12 @@ impl BillChainEventProcessorApi for BillChainEventProcessor {
         .await
     }
 
-    async fn resync_chain(&self, bill_id: &BillId, from_nostr: bool) -> Result<()> {
+    async fn resync_chain(
+        &self,
+        bill_id: &BillId,
+        from_nostr: bool,
+        mode: ResyncMode,
+    ) -> Result<()> {
         if !from_nostr {
             debug!("invalidating cache for {bill_id} without Nostr refetch");
             return self.invalidate_cache_for_bill(bill_id).await;
@@ -114,7 +121,7 @@ impl BillChainEventProcessorApi for BillChainEventProcessor {
             self.bill_store.get_keys(bill_id).await,
         ) {
             (Ok(mut existing_chain), Ok(bill_keys)) => {
-                debug!("starting bill chain resync for {bill_id}");
+                debug!("starting bill chain resync for {bill_id} with mode {mode:?}");
                 let bcr_keys = BcrKeys::from_private_key(&bill_keys.get_private_key());
                 // Pre-fetch validation data needed for all chain candidates
                 let is_paid = self.bill_store.is_paid(bill_id).await.map_err(|e| {
@@ -149,14 +156,34 @@ impl BillChainEventProcessorApi for BillChainEventProcessor {
                             continue;
                         }
 
-                        let (is_preferred, fork_point) =
-                            resolve_fork(existing_chain.blocks(), &blocks);
+                        let fork_point = match mode {
+                            ResyncMode::Normal => {
+                                let (is_preferred, fork_point) =
+                                    resolve_fork(existing_chain.blocks(), &blocks);
 
-                        if !is_preferred {
-                            continue;
+                                if !is_preferred {
+                                    continue;
+                                }
+
+                                fork_point
+                            }
+                            // In this mode, we want to find the point where the local chain diverges from the Nostr chain
+                            ResyncMode::NostrAuthoritative => {
+                                find_first_difference(existing_chain.blocks(), &blocks)
+                            }
+                        };
+
+                        if matches!(mode, ResyncMode::NostrAuthoritative)
+                            && fork_point == Some(BlockId::first())
+                        {
+                            return Err(Error::Blockchain(
+                                    "Nostr-authoritative resync cannot replace a differing genesis block".to_string(),
+                            ));
                         }
 
+                        // chain to validate before we persist
                         let mut test_chain = existing_chain.clone();
+
                         if let Some(fork_id) = &fork_point {
                             test_chain.truncate_from(*fork_id);
                         }
@@ -175,7 +202,7 @@ impl BillChainEventProcessorApi for BillChainEventProcessor {
                             Ok(()) => {
                                 if let Some(fork_id) = fork_point {
                                     info!(
-                                        "Fork resolution for bill {bill_id}: replacing blocks from height {fork_id} with preferred remote chain"
+                                        "Fork resolution with mode {mode:?} and bill {bill_id}: replacing blocks from height {fork_id} with preferred remote chain"
                                     );
                                     if let Err(e) = self
                                         .bill_blockchain_store
@@ -227,6 +254,9 @@ impl BillChainEventProcessorApi for BillChainEventProcessor {
                                         );
                                     }
                                 }
+
+                                // invalidate cache in any case for re-sync
+                                self.invalidate_cache_for_bill(bill_id).await?;
 
                                 debug!("resynced bill {bill_id} with {} remote events", data.len());
                                 return Ok(());
@@ -344,7 +374,7 @@ impl BillChainEventProcessor {
                             "Split chain detected for bill {bill_id} at height {} - resyncing",
                             block.id
                         );
-                        self.resync_chain(bill_id, true).await?;
+                        self.resync_chain(bill_id, true, ResyncMode::Normal).await?;
                         return Ok(());
                     }
                 }
@@ -379,7 +409,7 @@ impl BillChainEventProcessor {
                             "Received invalid block {} for bill {bill_id} - missing blocks - try to resync",
                             block.id
                         );
-                        self.resync_chain(bill_id, true).await?;
+                        self.resync_chain(bill_id, true, ResyncMode::Normal).await?;
                         break;
                     } else {
                         error!("Error adding block for bill {bill_id}: {e}");
@@ -2022,7 +2052,7 @@ mod tests {
 
         // This should process the valid chain and exit
         handler
-            .resync_chain(&bill_id, true)
+            .resync_chain(&bill_id, true, ResyncMode::Normal)
             .await
             .expect("resync should succeed");
     }
@@ -2163,7 +2193,7 @@ mod tests {
         );
 
         handler
-            .resync_chain(&bill_id, true)
+            .resync_chain(&bill_id, true, ResyncMode::Normal)
             .await
             .expect("resync should succeed with fork resolution");
     }
@@ -2278,9 +2308,455 @@ mod tests {
             bitcoin::Network::Testnet,
         );
 
-        let result = handler.resync_chain(&bill_id, true).await;
+        let result = handler
+            .resync_chain(&bill_id, true, ResyncMode::Normal)
+            .await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_resync_chain_nostr_authoritative_removes_local_only_block() {
+        let payer = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let payee = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let bcr_keys = BcrKeys::from_private_key(&private_key_test());
+        let bill_id = BillId::new(bcr_keys.pub_key(), bitcoin::Network::Testnet);
+        let bill = get_test_bitcredit_bill(&bill_id, &payer, &payee, None, None);
+
+        let genesis_chain = get_genesis_chain(Some(bill.clone()));
+
+        // Local chain has a block that was not published to Nostr
+        let ts = genesis_chain.get_latest_block().timestamp + 1000;
+        let local_only_block = BillBlock::create_block_for_request_to_accept(
+            bill_id.clone(),
+            genesis_chain.get_latest_block(),
+            &BillRequestToAcceptBlockData {
+                requester: BillParticipantBlockData::Ident(payer.clone().into()),
+                signatory: None,
+                signing_timestamp: ts,
+                signing_address: Some(empty_address()),
+                signer_identity_proof: Some(signed_identity_proof_test().into()),
+                acceptance_deadline_timestamp: ts + 2 * ACCEPT_DEADLINE_SECONDS,
+            },
+            &bcr_keys,
+            None,
+            &bcr_keys,
+            ts,
+        )
+        .unwrap();
+
+        let mut local_chain = genesis_chain.clone();
+        assert!(local_chain.try_add_block(local_only_block.clone()));
+
+        let event0 = generate_test_event(
+            &bcr_keys,
+            None,
+            None,
+            as_event_payload(&bill_id, genesis_chain.get_latest_block()),
+            &bill_id,
+        );
+        let nostr_events = vec![event0];
+
+        let (mut bill_chain_store, mut bill_store, contact, mut transport, mut chain_event_store) =
+            create_mocks();
+
+        bill_store
+            .expect_get_keys()
+            .returning(move |_| Ok(bcr_keys.clone()));
+
+        bill_store.expect_is_paid().returning(|_| Ok(false));
+
+        bill_store
+            .expect_invalidate_bill_in_cache()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let local_chain_clone = local_chain.clone();
+        bill_chain_store
+            .expect_get_chain()
+            .with(eq(bill_id.clone()))
+            .returning(move |_| Ok(local_chain_clone.clone()));
+
+        transport
+            .expect_resolve_public_chain()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .returning(move |_, _| Ok(nostr_events.clone()))
+            .once();
+
+        // local-only block is removed
+        bill_chain_store
+            .expect_remove_blocks_from_height()
+            .with(eq(bill_id.clone()), eq(local_only_block.id))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        bill_chain_store.expect_add_block().times(0);
+
+        chain_event_store
+            .expect_remove_chain_events()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        chain_event_store
+            .expect_add_chain_event()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let handler = BillChainEventProcessor::new(
+            Arc::new(bill_chain_store),
+            Arc::new(bill_store),
+            Arc::new(MockFileReferenceStore::new()),
+            Arc::new(contact),
+            Arc::new(chain_event_store),
+            Arc::new(transport),
+            Arc::new(MockMintClient::new()),
+            bitcoin::Network::Testnet,
+        );
+
+        handler
+            .resync_chain(&bill_id, true, ResyncMode::NostrAuthoritative)
+            .await
+            .expect("Nostr-authoritative resync should remove local-only blocks");
+    }
+
+    #[tokio::test]
+    async fn test_resync_chain_nostr_authoritative_rebuilds_chain_events_with_identical_blocks() {
+        let payer = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let payee = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let bcr_keys = BcrKeys::from_private_key(&private_key_test());
+        let bill_id = BillId::new(bcr_keys.pub_key(), bitcoin::Network::Testnet);
+        let bill = get_test_bitcredit_bill(&bill_id, &payer, &payee, None, None);
+
+        let local_chain = get_genesis_chain(Some(bill.clone()));
+
+        let event0 = generate_test_event(
+            &bcr_keys,
+            None,
+            None,
+            as_event_payload(&bill_id, local_chain.get_latest_block()),
+            &bill_id,
+        );
+        let nostr_events = vec![event0];
+
+        let (mut bill_chain_store, mut bill_store, contact, mut transport, mut chain_event_store) =
+            create_mocks();
+
+        bill_store
+            .expect_get_keys()
+            .returning(move |_| Ok(bcr_keys.clone()));
+
+        bill_store.expect_is_paid().returning(|_| Ok(false));
+
+        bill_store
+            .expect_invalidate_bill_in_cache()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let local_chain_clone = local_chain.clone();
+        bill_chain_store
+            .expect_get_chain()
+            .with(eq(bill_id.clone()))
+            .returning(move |_| Ok(local_chain_clone.clone()));
+
+        transport
+            .expect_resolve_public_chain()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .returning(move |_, _| Ok(nostr_events.clone()))
+            .once();
+
+        bill_chain_store.expect_remove_blocks_from_height().times(0);
+
+        bill_chain_store.expect_add_block().times(0);
+
+        // Chain events ARE refreshed, even if the chain doesn't change
+        chain_event_store
+            .expect_remove_chain_events()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        chain_event_store
+            .expect_add_chain_event()
+            .times(1)
+            .returning(|_| Ok(()));
+
+        let handler = BillChainEventProcessor::new(
+            Arc::new(bill_chain_store),
+            Arc::new(bill_store),
+            Arc::new(MockFileReferenceStore::new()),
+            Arc::new(contact),
+            Arc::new(chain_event_store),
+            Arc::new(transport),
+            Arc::new(MockMintClient::new()),
+            bitcoin::Network::Testnet,
+        );
+
+        handler
+            .resync_chain(&bill_id, true, ResyncMode::NostrAuthoritative)
+            .await
+            .expect("Nostr-authoritative resync should rebuild chain events");
+    }
+
+    #[tokio::test]
+    async fn test_resync_chain_nostr_authoritative_adds_remote_blocks() {
+        let payer = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let payee = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let bcr_keys = BcrKeys::from_private_key(&private_key_test());
+        let bill_id = BillId::new(bcr_keys.pub_key(), bitcoin::Network::Testnet);
+        let bill = get_test_bitcredit_bill(&bill_id, &payer, &payee, None, None);
+
+        let local_chain = get_genesis_chain(Some(bill.clone()));
+
+        let ts = local_chain.get_latest_block().timestamp + 1000;
+        let remote_block = BillBlock::create_block_for_request_to_accept(
+            bill_id.clone(),
+            local_chain.get_latest_block(),
+            &BillRequestToAcceptBlockData {
+                requester: BillParticipantBlockData::Ident(payer.clone().into()),
+                signatory: None,
+                signing_timestamp: ts,
+                signing_address: Some(empty_address()),
+                signer_identity_proof: Some(signed_identity_proof_test().into()),
+                acceptance_deadline_timestamp: ts + 2 * ACCEPT_DEADLINE_SECONDS,
+            },
+            &bcr_keys,
+            None,
+            &bcr_keys,
+            ts,
+        )
+        .unwrap();
+
+        let event0 = generate_test_event(
+            &bcr_keys,
+            None,
+            None,
+            as_event_payload(&bill_id, local_chain.get_latest_block()),
+            &bill_id,
+        );
+
+        let event1 = generate_test_event(
+            &bcr_keys,
+            Some(event0.clone()),
+            Some(event0.clone()),
+            as_event_payload(&bill_id, &remote_block),
+            &bill_id,
+        );
+
+        let nostr_events = vec![event0, event1];
+
+        let (
+            mut bill_chain_store,
+            mut bill_store,
+            mut contact,
+            mut transport,
+            mut chain_event_store,
+        ) = create_mocks();
+
+        bill_store
+            .expect_get_keys()
+            .returning(move |_| Ok(bcr_keys.clone()));
+
+        bill_store.expect_is_paid().returning(|_| Ok(false));
+
+        bill_store
+            .expect_invalidate_bill_in_cache()
+            .returning(|_| Ok(()));
+
+        let local_chain_clone = local_chain.clone();
+        bill_chain_store
+            .expect_get_chain()
+            .with(eq(bill_id.clone()))
+            .returning(move |_| Ok(local_chain_clone.clone()));
+
+        transport
+            .expect_resolve_public_chain()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .returning(move |_, _| Ok(nostr_events.clone()))
+            .once();
+
+        // nothing removed, because first blocks are identical
+        bill_chain_store.expect_remove_blocks_from_height().times(0);
+
+        // new blocks are added
+        bill_chain_store
+            .expect_add_block()
+            .with(eq(bill_id.clone()), eq(remote_block.clone()))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        contact.expect_ensure_nostr_contact().returning(|_| ());
+
+        chain_event_store
+            .expect_remove_chain_events()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        // new chain events are added
+        chain_event_store
+            .expect_add_chain_event()
+            .times(2)
+            .returning(|_| Ok(()));
+
+        let handler = BillChainEventProcessor::new(
+            Arc::new(bill_chain_store),
+            Arc::new(bill_store),
+            Arc::new(MockFileReferenceStore::new()),
+            Arc::new(contact),
+            Arc::new(chain_event_store),
+            Arc::new(transport),
+            Arc::new(MockMintClient::new()),
+            bitcoin::Network::Testnet,
+        );
+
+        handler
+            .resync_chain(&bill_id, true, ResyncMode::NostrAuthoritative)
+            .await
+            .expect("Nostr-authoritative resync should append missing remote blocks");
+    }
+
+    #[tokio::test]
+    async fn test_resync_chain_nostr_authoritative_replaces_non_preferred_remote_fork() {
+        let payer = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let payee = BillIdentParticipant::new(get_baseline_identity().identity).unwrap();
+        let bcr_keys = BcrKeys::from_private_key(&private_key_test());
+        let bill_id = BillId::new(bcr_keys.pub_key(), bitcoin::Network::Testnet);
+        let bill = get_test_bitcredit_bill(&bill_id, &payer, &payee, None, None);
+
+        let genesis_chain = get_genesis_chain(Some(bill.clone()));
+        let ts = genesis_chain.get_latest_block().timestamp + 1000;
+
+        // Local block has the earlier timestamp and would therefore normally win
+        let local_block = BillBlock::create_block_for_request_to_accept(
+            bill_id.clone(),
+            genesis_chain.get_latest_block(),
+            &BillRequestToAcceptBlockData {
+                requester: BillParticipantBlockData::Ident(payer.clone().into()),
+                signatory: None,
+                signing_timestamp: ts,
+                signing_address: Some(empty_address()),
+                signer_identity_proof: Some(signed_identity_proof_test().into()),
+                acceptance_deadline_timestamp: ts + 2 * ACCEPT_DEADLINE_SECONDS,
+            },
+            &bcr_keys,
+            None,
+            &bcr_keys,
+            ts + 1000,
+        )
+        .unwrap();
+
+        let mut local_chain = genesis_chain.clone();
+        assert!(local_chain.try_add_block(local_block.clone()));
+
+        // Remote fork has a later timestamp, so Normal mode would reject it
+        let remote_block = BillBlock::create_block_for_request_to_accept(
+            bill_id.clone(),
+            genesis_chain.get_latest_block(),
+            &BillRequestToAcceptBlockData {
+                requester: BillParticipantBlockData::Ident(payer.clone().into()),
+                signatory: None,
+                signing_timestamp: ts,
+                signing_address: Some(empty_address()),
+                signer_identity_proof: Some(signed_identity_proof_test().into()),
+                acceptance_deadline_timestamp: ts + 2 * ACCEPT_DEADLINE_SECONDS,
+            },
+            &bcr_keys,
+            None,
+            &bcr_keys,
+            ts + 2000,
+        )
+        .unwrap();
+
+        let event0 = generate_test_event(
+            &bcr_keys,
+            None,
+            None,
+            as_event_payload(&bill_id, genesis_chain.get_latest_block()),
+            &bill_id,
+        );
+
+        let event_remote = generate_test_event(
+            &bcr_keys,
+            Some(event0.clone()),
+            Some(event0.clone()),
+            as_event_payload(&bill_id, &remote_block),
+            &bill_id,
+        );
+
+        let nostr_events = vec![event0, event_remote];
+
+        let (
+            mut bill_chain_store,
+            mut bill_store,
+            mut contact,
+            mut transport,
+            mut chain_event_store,
+        ) = create_mocks();
+
+        bill_store
+            .expect_get_keys()
+            .returning(move |_| Ok(bcr_keys.clone()));
+
+        bill_store.expect_is_paid().returning(|_| Ok(false));
+
+        bill_store
+            .expect_invalidate_bill_in_cache()
+            .returning(|_| Ok(()));
+
+        let local_chain_clone = local_chain.clone();
+        bill_chain_store
+            .expect_get_chain()
+            .with(eq(bill_id.clone()))
+            .returning(move |_| Ok(local_chain_clone.clone()));
+
+        transport
+            .expect_resolve_public_chain()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .returning(move |_, _| Ok(nostr_events.clone()))
+            .once();
+
+        // replace local blocks from fork height
+        bill_chain_store
+            .expect_remove_blocks_from_height()
+            .with(eq(bill_id.clone()), eq(local_block.id))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        bill_chain_store
+            .expect_add_block()
+            .with(eq(bill_id.clone()), eq(remote_block.clone()))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        contact.expect_ensure_nostr_contact().returning(|_| ());
+
+        chain_event_store
+            .expect_remove_chain_events()
+            .with(eq(bill_id.to_string()), eq(BlockchainType::Bill))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        chain_event_store
+            .expect_add_chain_event()
+            .times(2)
+            .returning(|_| Ok(()));
+
+        let handler = BillChainEventProcessor::new(
+            Arc::new(bill_chain_store),
+            Arc::new(bill_store),
+            Arc::new(MockFileReferenceStore::new()),
+            Arc::new(contact),
+            Arc::new(chain_event_store),
+            Arc::new(transport),
+            Arc::new(MockMintClient::new()),
+            bitcoin::Network::Testnet,
+        );
+
+        handler
+            .resync_chain(&bill_id, true, ResyncMode::NostrAuthoritative)
+            .await
+            .expect("Nostr-authoritative resync should replace local fork");
     }
 
     #[tokio::test]

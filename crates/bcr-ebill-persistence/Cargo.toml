@@ -9,7 +9,6 @@ doctest = false
 
 [dependencies]
 borsh.workspace = true
-chrono.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 serde_json.workspace = true
@@ -21,6 +20,7 @@ futures.workspace = true
 nostr.workspace = true
 bcr-ebill-core.workspace = true
 bcr-common.workspace = true
+time.workspace = true
 tokio.workspace = true
 tokio_with_wasm.workspace = true
 bitcoin.workspace = true
@@ -37,3 +37,6 @@ surrealdb = { workspace = true, default-features = false, features = ["protocol-
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 surrealdb = { workspace = true, default-features = false, features = ["kv-mem"] }
+
+[dev-dependencies]
+nostr_043 = { package = "nostr", version = "=0.43.1" } # for backwards-compat testing

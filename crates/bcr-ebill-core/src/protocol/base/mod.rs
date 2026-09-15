@@ -1,6 +1,5 @@
 use bitcoin::hashes::sha256::Hash as Sha256HexHash;
 use borsh_derive::{BorshDeserialize, BorshSerialize};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -28,7 +27,7 @@ use zip::Zip;
 
 use crate::protocol::{Field, ProtocolValidationError};
 
-pub type DateTimeUtc = DateTime<Utc>;
+pub type DateTimeUtc = time::OffsetDateTime;
 pub type BitcoinAddress = bitcoin::Address<bitcoin::address::NetworkUnchecked>;
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

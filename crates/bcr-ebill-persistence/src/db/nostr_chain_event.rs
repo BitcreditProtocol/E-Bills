@@ -1,5 +1,5 @@
 use super::{
-    Result,
+    Error, Result,
     surreal::{Bindings, SurrealWrapper},
 };
 use crate::{
@@ -68,7 +68,10 @@ impl NostrChainEventStoreApi for SurrealNostrChainEventStore {
         let result: Vec<NostrChainEventDb> = self
             .find_all_chain_events(chain_id.to_owned(), chain_type)
             .await?;
-        Ok(result.into_iter().map(Into::into).collect())
+        Ok(result
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_>>()?)
     }
 
     async fn find_latest_block_events(
@@ -88,7 +91,10 @@ impl NostrChainEventStoreApi for SurrealNostrChainEventStore {
                 .collect(),
             None => vec![],
         };
-        Ok(latest.into_iter().map(Into::into).collect())
+        Ok(latest
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_>>()?)
     }
 
     async fn find_by_block_hash(&self, hash: &Sha256Hash) -> Result<Option<NostrChainEvent>> {
@@ -107,12 +113,15 @@ impl NostrChainEventStoreApi for SurrealNostrChainEventStore {
             )
             .await?;
 
-        let value = result.first().map(|v| v.to_owned().into());
+        let value = result
+            .first()
+            .map(|v| v.to_owned().try_into())
+            .transpose()?;
         Ok(value)
     }
 
     async fn add_chain_event(&self, event: NostrChainEvent) -> Result<()> {
-        let db_data: NostrChainEventDb = event.clone().into();
+        let db_data: NostrChainEventDb = event.clone().try_into()?;
         let _: Option<NostrChainEventDb> = self
             .db
             .upsert(Self::TABLE, event.event_id.to_owned(), db_data)
@@ -123,7 +132,7 @@ impl NostrChainEventStoreApi for SurrealNostrChainEventStore {
     async fn by_event_id(&self, event_id: &str) -> Result<Option<NostrChainEvent>> {
         let event_id = event_id.to_owned();
         let result: Option<NostrChainEventDb> = self.db.select_one(Self::TABLE, event_id).await?;
-        Ok(result.map(|r| r.into()))
+        Ok(result.map(|r| r.try_into()).transpose()?)
     }
 
     async fn find_root_event(
@@ -141,7 +150,10 @@ impl NostrChainEventStoreApi for SurrealNostrChainEventStore {
                     "SELECT * FROM type::table(${DB_TABLE}) WHERE {CHAIN_ID} = ${CHAIN_ID} AND {CHAIN_TYPE} = ${CHAIN_TYPE} AND {EVENT_ID} = {ROOT_ID}"
                 ).as_str(), bindings)
                 .await?;
-        Ok(result.first().map(|r| r.to_owned().into()))
+        Ok(result
+            .first()
+            .map(|r| r.to_owned().try_into())
+            .transpose()?)
     }
 
     async fn remove_chain_events(&self, chain_id: &str, chain_type: BlockchainType) -> Result<()> {
@@ -160,6 +172,62 @@ impl NostrChainEventStoreApi for SurrealNostrChainEventStore {
             )
             .await?;
         Ok(())
+    }
+}
+
+/// Nostr event for the DB
+/// Note: upgrading from
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NostrEventDb {
+    id: nostr::event::EventId,
+    pubkey: nostr::key::PublicKey,
+    created_at: nostr::types::Timestamp,
+    kind: nostr::event::Kind,
+    tags: nostr::event::Tags,
+    content: String,
+    // Use the pre-nostr-0.45 representation as bytes for backwards compat
+    sig: bitcoin::secp256k1::schnorr::Signature,
+}
+
+impl TryFrom<Event> for NostrEventDb {
+    type Error = Error;
+    fn try_from(event: Event) -> Result<Self> {
+        Ok(Self {
+            id: event.id,
+            pubkey: event.pubkey,
+            created_at: event.created_at,
+            kind: event.kind,
+            tags: event.tags,
+            content: event.content,
+            sig: bitcoin::secp256k1::schnorr::Signature::from_slice(event.sig.as_bytes()).map_err(
+                |e| {
+                    Error::Persistence(format!(
+                        "Could not create schnorr Signature from nostr signature: {e}"
+                    ))
+                },
+            )?,
+        })
+    }
+}
+
+impl TryFrom<NostrEventDb> for Event {
+    type Error = Error;
+    fn try_from(value: NostrEventDb) -> Result<Self> {
+        let sig = nostr::event::Signature::from_slice(&value.sig.serialize()).map_err(|e| {
+            Error::Persistence(format!(
+                "Could not create nostr Signature from persisted signature: {e}"
+            ))
+        })?;
+
+        Ok(Event::new(
+            value.id,
+            value.pubkey,
+            value.created_at,
+            value.kind,
+            value.tags,
+            value.content,
+            sig,
+        ))
     }
 }
 
@@ -187,12 +255,13 @@ pub struct NostrChainEventDb {
     /// The timestamp of the event.
     pub time: Timestamp,
     /// The event as we received it via nostr.
-    pub payload: Event,
+    pub payload: NostrEventDb,
 }
 
-impl From<NostrChainEvent> for NostrChainEventDb {
-    fn from(event: NostrChainEvent) -> Self {
-        Self {
+impl TryFrom<NostrChainEvent> for NostrChainEventDb {
+    type Error = Error;
+    fn try_from(event: NostrChainEvent) -> Result<Self> {
+        Ok(Self {
             event_id: event.event_id,
             root_id: event.root_id,
             reply_id: event.reply_id,
@@ -203,14 +272,16 @@ impl From<NostrChainEvent> for NostrChainEventDb {
             block_hash: event.block_hash,
             received: event.received,
             time: event.time,
-            payload: event.payload,
-        }
+            payload: event.payload.try_into()?,
+        })
     }
 }
 
-impl From<NostrChainEventDb> for NostrChainEvent {
-    fn from(db: NostrChainEventDb) -> Self {
-        Self {
+impl TryFrom<NostrChainEventDb> for NostrChainEvent {
+    type Error = Error;
+
+    fn try_from(db: NostrChainEventDb) -> Result<Self> {
+        Ok(Self {
             event_id: db.event_id,
             root_id: db.root_id,
             reply_id: db.reply_id,
@@ -221,8 +292,8 @@ impl From<NostrChainEventDb> for NostrChainEvent {
             block_hash: db.block_hash,
             received: db.received,
             time: db.time,
-            payload: db.payload,
-        }
+            payload: Event::try_from(db.payload)?,
+        })
     }
 }
 
@@ -468,5 +539,75 @@ mod tests {
         EventBuilder::new(nostr::event::Kind::TextNote, "content")
             .finalize(&keys)
             .expect("could not create nostr test event")
+    }
+
+    // 0.45 upgrade regression test
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct LegacyNostrChainEventDb {
+        event_id: String,
+        root_id: String,
+        reply_id: Option<String>,
+        author: String,
+        chain_id: String,
+        chain_type: BlockchainType,
+        block_height: usize,
+        block_hash: Sha256Hash,
+        received: Timestamp,
+        time: Timestamp,
+
+        // Actual historical Event implementation
+        payload: nostr_043::event::Event,
+    }
+
+    fn get_legacy_event() -> nostr_043::event::Event {
+        let keys = nostr_043::key::Keys::generate();
+
+        nostr_043::event::EventBuilder::new(nostr_043::event::Kind::TextNote, "legacy content")
+            .sign_with_keys(&keys)
+            .expect("could not create legacy event")
+    }
+
+    #[tokio::test]
+    async fn test_reads_chain_event_persisted_with_nostr_0_43() {
+        let store = get_store("nostr_043_compat").await;
+
+        let legacy_event = get_legacy_event();
+
+        let event_id = "legacy-event-id";
+
+        let legacy = LegacyNostrChainEventDb {
+            event_id: event_id.to_string(),
+            root_id: event_id.to_string(),
+            reply_id: None,
+            author: "author".to_string(),
+            chain_id: "chain_id".to_string(),
+            chain_type: BlockchainType::Bill,
+            block_height: 1,
+            block_hash: Sha256Hash::new("root_hash"),
+            received: Timestamp::now(),
+            time: Timestamp::now(),
+            payload: legacy_event,
+        };
+
+        // write using 0.43
+        let _: Option<LegacyNostrChainEventDb> = store
+            .db
+            .upsert(
+                SurrealNostrChainEventStore::TABLE,
+                event_id.to_string(),
+                legacy,
+            )
+            .await
+            .expect("could not persist nostr 0.43 event");
+
+        // read using 0.45+
+        let loaded = store
+            .by_event_id(event_id)
+            .await
+            .expect("could not read nostr 0.43 event")
+            .expect("event not found");
+
+        assert_eq!(loaded.chain_id, "chain_id");
+        assert_eq!(loaded.payload.content, "legacy content");
     }
 }

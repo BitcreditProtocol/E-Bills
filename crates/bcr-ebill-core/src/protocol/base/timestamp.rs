@@ -1,13 +1,11 @@
-use chrono::{NaiveTime, TimeZone, Utc};
+use crate::protocol::{DateTimeUtc, ProtocolValidationError};
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     ops::{Add, Sub},
     time::Duration,
 };
-
-use serde::{Deserialize, Serialize};
-
-use crate::protocol::{DateTimeUtc, ProtocolValidationError};
+use time::Time;
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
 #[serde(try_from = "u64", into = "u64")]
@@ -15,16 +13,17 @@ pub struct Timestamp(u64);
 
 impl Timestamp {
     pub fn new(timestamp: u64) -> Result<Timestamp, ProtocolValidationError> {
-        let valid = timestamp <= DateTimeUtc::MAX_UTC.timestamp() as u64
-            && Utc.timestamp_opt(timestamp as i64, 0).single().is_some();
-        if !valid {
-            return Err(ProtocolValidationError::InvalidTimestamp);
-        }
+        let timestamp_i64 =
+            i64::try_from(timestamp).map_err(|_| ProtocolValidationError::InvalidTimestamp)?;
+
+        DateTimeUtc::from_unix_timestamp(timestamp_i64)
+            .map_err(|_| ProtocolValidationError::InvalidTimestamp)?;
+
         Ok(Timestamp(timestamp))
     }
 
     pub fn now() -> Self {
-        Timestamp(Utc::now().timestamp() as u64)
+        Timestamp(DateTimeUtc::now_utc().unix_timestamp() as u64)
     }
 
     pub fn zero() -> Self {
@@ -37,30 +36,19 @@ impl Timestamp {
 
     pub fn start_of_day(&self) -> Timestamp {
         let dt = self.to_datetime();
-        let date = dt.date_naive();
-        let end_of_day_time =
-            NaiveTime::from_hms_micro_opt(00, 00, 00, 000_000).expect("is a valid time");
-        let date_time = date.and_time(end_of_day_time);
-        let date_utc = Utc.from_utc_datetime(&date_time);
-        Timestamp(date_utc.timestamp() as u64)
+        Timestamp(dt.replace_time(Time::MIDNIGHT).unix_timestamp() as u64)
     }
 
     pub fn end_of_day(&self) -> Timestamp {
         let dt = self.to_datetime();
-        let date = dt.date_naive();
-        let end_of_day_time =
-            NaiveTime::from_hms_micro_opt(23, 59, 59, 999_999).expect("is a valid time");
-        let date_time = date.and_time(end_of_day_time);
-        let date_utc = Utc.from_utc_datetime(&date_time);
-        Timestamp(date_utc.timestamp() as u64)
+        let end_of_day = Time::from_hms(23, 59, 59).expect("valid time");
+
+        Timestamp(dt.replace_time(end_of_day).unix_timestamp() as u64)
     }
 
     pub fn to_datetime(&self) -> DateTimeUtc {
         // safe, since we check bounds during creation
-        match Utc.timestamp_opt(self.0 as i64, 0).single() {
-            Some(dt) => dt,
-            None => panic!("invalid timestamp"),
-        }
+        DateTimeUtc::from_unix_timestamp(self.0 as i64).expect("invalid timestamp")
     }
 
     pub fn has_deadline_passed(&self, deadline: &Timestamp) -> bool {
@@ -94,7 +82,7 @@ impl Display for Timestamp {
 
 impl From<DateTimeUtc> for Timestamp {
     fn from(value: DateTimeUtc) -> Self {
-        Timestamp(value.timestamp() as u64)
+        Timestamp(value.unix_timestamp() as u64)
     }
 }
 
@@ -172,14 +160,12 @@ impl From<Timestamp> for u64 {
 
 #[cfg(test)]
 mod tests {
-    use std::time::UNIX_EPOCH;
-
-    use crate::protocol::tests::tests::test_ts;
-
     use super::*;
+    use crate::protocol::tests::tests::test_ts;
     use borsh::BorshDeserialize;
-    use chrono::Utc;
     use serde::{Deserialize, Serialize};
+    use std::time::UNIX_EPOCH;
+    use time::macros::datetime;
 
     #[derive(
         Debug,
@@ -264,14 +250,14 @@ mod tests {
 
     #[test]
     fn test_start_of_day() {
-        let ts: Timestamp = Utc.with_ymd_and_hms(2025, 1, 15, 5, 10, 45).unwrap().into();
+        let ts: Timestamp = datetime!(2025-01-15 5:10:45 UTC).into();
         let start_of_day = ts.start_of_day();
         assert!(start_of_day < ts,);
     }
 
     #[test]
     fn test_end_of_day() {
-        let ts: Timestamp = Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap().into();
+        let ts: Timestamp = datetime!(2025-01-15 0:00:00 UTC).into();
         let end_of_day = ts.end_of_day();
         assert!(end_of_day > ts,);
         let end_of_day_end_of_dayd = ts.end_of_day();
@@ -280,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_deadline_is_at_or_after_end_of_day_of() {
-        let ts: Timestamp = Utc.with_ymd_and_hms(2025, 1, 15, 0, 0, 0).unwrap().into();
+        let ts: Timestamp = datetime!(2025-01-15 0:00:00 UTC).into();
         let end_of_day = ts.end_of_day();
         assert!(ts.deadline_is_at_or_after_end_of_day_of(&end_of_day));
         assert!(!ts.deadline_is_at_or_after_end_of_day_of(&(end_of_day - 1)));

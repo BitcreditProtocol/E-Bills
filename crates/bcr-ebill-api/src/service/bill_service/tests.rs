@@ -7176,7 +7176,7 @@ async fn check_mint_state_for_all_bills_baseline() {
         .expect_lookup_quote_for_mint()
         .returning(|_, _| {
             Ok(QuoteStatusReply::Denied {
-                tstamp: DateTimeUtc::default(),
+                tstamp: DateTimeUtc::UNIX_EPOCH,
             })
         });
     let req_node_id = identity.identity.node_id.clone();
@@ -7211,7 +7211,7 @@ async fn check_mint_state_baseline() {
         .expect_lookup_quote_for_mint()
         .returning(|_, _| {
             Ok(QuoteStatusReply::Denied {
-                tstamp: DateTimeUtc::default(),
+                tstamp: DateTimeUtc::UNIX_EPOCH,
             })
         });
     let req_node_id = identity.identity.node_id.clone();
@@ -7286,7 +7286,7 @@ async fn check_mint_state_pending_offered() {
         .returning(|_, _| {
             Ok(QuoteStatusReply::Offered {
                 keyset_id: cdk02::Id::try_from("00c7b45973e5f0fc".to_owned()).unwrap(),
-                expiration_date: DateTimeUtc::default(),
+                expiration_date: DateTimeUtc::UNIX_EPOCH,
                 discounted: bitcoin::Amount::default(),
             })
         });

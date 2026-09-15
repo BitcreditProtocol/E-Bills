@@ -290,6 +290,7 @@ struct NotificationDb {
     pub notification_type: NotificationType,
     pub reference_id: Option<String>,
     pub description: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub datetime: DateTimeUtc,
     pub active: bool,
     #[serde(default)]
@@ -346,6 +347,7 @@ struct SentBlockNotificationDb {
     pub reference_id: String,
     pub block_height: i32,
     pub action_type: ActionType,
+    #[serde(with = "time::serde::rfc3339")]
     pub datetime: DateTimeUtc,
 }
 

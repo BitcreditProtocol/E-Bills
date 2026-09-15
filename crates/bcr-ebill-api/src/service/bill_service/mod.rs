@@ -244,6 +244,9 @@ pub trait BillServiceApi: ServiceTraitBounds {
         current_identity_node_id: &NodeId,
     ) -> Result<Vec<BillBlockPlaintextWrapper>>;
 
+    /// If dev mode is on, reset the bill's local mint quote state
+    async fn dev_mode_reset_bill_mint_quote_state(&self, bill_id: &BillId) -> Result<()>;
+
     /// Shares a bill with the configured court and the given court node id
     async fn share_bill_with_court(
         &self,

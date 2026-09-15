@@ -6,6 +6,14 @@
         * uses keys API v2 - WARN: this API needs to be deployed before this is deployed
 * Fix flaky test
 * Remove deprecated nip04 code
+* Migrate from `chrono` to `time`
+* Fix backwards-compat issue introduced by the Nostr 0.45 upgrade - `nostr::event::Signature` on `nostr::event::Event` is serialized differently. We use a custom serialization type now.
+
+# 0.5.15-hotfix1
+
+* Add dev-mode endpoint `dev_mode_override_bill_chain_from_nostr` that syncs a local bill, overriding it with the state on Nostr
+    * This is helpful if e.g. a bug prevented a local block from propagating, or chains diverged between clients - if all sides do this, they have the same state
+* Add dev-mode endpoint `dev_mode_reset_bill_mint_quote_state` that resets a bill's local mint quote state
 
 # 0.5.15
 

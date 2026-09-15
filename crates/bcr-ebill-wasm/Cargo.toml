@@ -20,7 +20,7 @@ futures.workspace = true
 serde_repr.workspace = true
 getrandom = { workspace = true, features = ["wasm_js"] }
 log.workspace = true
-chrono.workspace = true
+time = {workspace = true, features = ["wasm-bindgen", "serde", "formatting", "parsing", "macros"]}
 thiserror.workspace = true
 uuid.workspace = true
 anyhow.workspace = true

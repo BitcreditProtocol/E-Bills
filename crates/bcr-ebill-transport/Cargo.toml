@@ -31,7 +31,7 @@ futures.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
-nostr-relay-builder = "0.44"
+nostr-relay-builder = "0.44" # superseeded by nostr-sdk 0.45, but that has a race-condition bug, so staying on this one for now
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 reqwest = { workspace = true, features = ["json"] }

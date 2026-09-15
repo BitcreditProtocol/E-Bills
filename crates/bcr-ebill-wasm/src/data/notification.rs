@@ -4,6 +4,7 @@ use bcr_ebill_core::application::notification::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::{UtcOffset, macros::format_description};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
 
@@ -39,7 +40,11 @@ impl From<Notification> for NotificationWeb {
             description: val.description,
             datetime: val
                 .datetime
-                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                .to_offset(UtcOffset::UTC)
+                .format(&format_description!(
+                    "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+                ))
+                .expect("valid datetime format"),
             active: val.active,
             level: val.level.into(),
             payload: val.payload,

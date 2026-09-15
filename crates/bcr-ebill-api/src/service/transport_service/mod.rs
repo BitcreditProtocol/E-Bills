@@ -160,6 +160,15 @@ impl NostrContactData {
     }
 }
 
+/// The resync mode
+/// Normal prefers the longest chain and the local chain
+/// NostrAuthoritative strictly prefers the remote chain, overriding the local chain
+#[derive(Clone, Debug)]
+pub enum ResyncMode {
+    Normal,
+    NostrAuthoritative,
+}
+
 /// Our custom data on nostr Metadata messages
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BcrMetadata {
