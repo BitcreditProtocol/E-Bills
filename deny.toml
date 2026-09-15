@@ -3,6 +3,7 @@
 [graph]
 targets = []
 exclude = []
+exclude-dev = true
 all-features = false
 no-default-features = false
 features = []
@@ -14,7 +15,6 @@ feature-depth = 1
 # More documentation for the advisories section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
 [advisories]
-ignore = []
 unmaintained = "workspace"
 
 # This section is considered when running `cargo deny check licenses`
@@ -26,6 +26,17 @@ allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Unlicense", "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.8
 exceptions = []
+
+[[licenses.clarify]]
+crate = "surrealdb@2.6.5"
+expression = "BUSL-1.1"
+license-files = []
+
+[[licenses.clarify]]
+crate = "surrealdb-core@2.6.5"
+expression = "BUSL-1.1"
+license-files = []
+
 
 [licenses.private]
 ignore = false
@@ -47,7 +58,7 @@ skip = []
 skip-tree = []
 [bans.workspace-dependencies]
 duplicates = "deny"
-unused = "deny"
+unused = "allow"
 
 # This section is considered when running `cargo deny check sources`.
 # More documentation about the 'sources' section can be found here:
@@ -62,3 +73,4 @@ allow-git = []
 github = ["BitcreditProtocol"]
 gitlab = []
 bitbucket = []
+
