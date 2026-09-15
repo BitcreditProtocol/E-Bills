@@ -1,9 +1,14 @@
 # AGENTS.md
 
-Agent-specific context for Bitcredit-Core. What the project is lives in [README.md](README.md);
-general contributor guidance is inherited from the BitcreditProtocol organisation (this repo's
-`CONTRIBUTING.md` was removed in #983). Everything here is a default: the developer's
-instructions win, and if a rule fights the task, say so and get sign-off before breaking it.
+Agent-specific guidance for Bitcredit-Core. See [README.md](README.md) for the project overview
+and the organisation's [contributing guide](https://github.com/BitcreditProtocol/.github/blob/master/CONTRIBUTING.md)
+for shared contribution rules.
+
+Working preferences are defaults; the compatibility requirements below are mandatory.
+If a task conflicts with them, surface the conflict.
+
+Be terse. Make the smallest change that fully solves the task. Avoid unrelated refactoring
+and documentation.
 
 ## Project Map
 
@@ -48,7 +53,8 @@ passed — `just check` is where they are enforced, and the PR checklist asks fo
   Schnorr-signed, so a field change alters hashes other clients already verify. Chains are
   append-only (`Blockchain::try_add_block`, no removal) and every inbound block is re-validated
   locally: relays are transport, not consensus (CHANGELOG 0.5.1-1 still calls chain reordering
-  a pre-mainnet placeholder). Prefer changes old clients can still read, as 0.5.13 did.
+  a pre-mainnet placeholder). Backwards compatibility of wire formats and persisted data is
+  mandatory. Never introduce changes that break existing clients or stored data.
 - **Bill, mint and payment states are separate machines.** `BillState` in `application/bill`,
   `MintRequestStatus` in `protocol/mint` and Esplora payment checks
   (`bcr-ebill-api/src/external/bitcoin.rs`) are computed independently. A valid signature
@@ -67,8 +73,6 @@ passed — `just check` is where they are enforced, and the PR checklist asks fo
    opt-level 0 hits a SurrealDB index-out-of-bounds bug.
 2. **Amounts cross to JS as strings.** `Sum` serialises as a string to avoid JavaScript
    precision loss (CHANGELOG 0.5.1-1); don't expose sats as numbers.
-3. **Wait for `MintingEnabled` before minting**; an offer that is merely `Accepted` fails
-   (hotfix 0.5.0-2).
 
 This list grows from real incidents only — add one whenever an agent or human loses time
 here; it is the cheapest productivity investment in the repo.
@@ -105,9 +109,8 @@ This section is the per-task delta.
   reviewable on its own; the subject says why, not just what. Reviewers only catch
   mistakes in changes they can hold in their head.
 - Titles: conventional-commit style in plain language, e.g. `fix(api): recourse blocks
-  reach the drawee again`. Mark breaking changes with the `breaking` label, not a `!` in
-  the title; release notes are built from labels (see
-  [`.github/release.yml`](.github/release.yml)), so also label `bug`, `enhancement`,
+  reach the drawee again`. Release notes are built from labels (see
+  [`.github/release.yml`](.github/release.yml)), so label `bug`, `enhancement`,
   `documentation` or `dependencies`.
 - Body: the problem in a sentence or two, then how it was fixed, then how it was verified.
   The [PR template](.github/PULL_REQUEST_TEMPLATE.md) asks exactly that. End with the
@@ -121,10 +124,9 @@ This section is the per-task delta.
   reason. No status check is required to merge, so a red check may predate your change:
   confirm that before blaming it, and say so in the PR. Stay quiet when nothing is new;
   stop when checks are green on the latest commit.
-- Every PR adds a bullet to the top section of [CHANGELOG.md](CHANGELOG.md), tagging
-  breakage inline like existing entries (`breaking DB change`, `breaking API change`,
-  `breaking bill chain change`). The version is bumped once per cycle in the root
-  `[workspace.package]` (`init X.Y.Z` commits), never per PR; scheme in
+- Every PR adds a bullet to the top section of [CHANGELOG.md](CHANGELOG.md). Describe
+  public API changes in the PR and changelog. The version is bumped once per
+  cycle in the root `[workspace.package]` (`init X.Y.Z` commits), never per PR; scheme in
   [docs/versioning.md](docs/versioning.md).
 - Workflows pin actions by commit SHA with a version comment (#982); keep that form.
   Releases follow [docs/wasm_releasing.md](docs/wasm_releasing.md) plus the README
