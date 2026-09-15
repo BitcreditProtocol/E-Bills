@@ -30,7 +30,7 @@ RUST_LOG=info cargo test -- --nocapture
 
 ## Contribute
 
-Check out the project [contributing guide](./CONTRIBUTING.md).
+Check out the organisation's [contributing guide](https://github.com/BitcreditProtocol/.github/blob/master/CONTRIBUTING.md).
 
 ## WASM publication approval
 
