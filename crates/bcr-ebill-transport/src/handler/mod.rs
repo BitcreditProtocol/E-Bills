@@ -1,6 +1,7 @@
 use crate::{Result, handler::public_chain_helpers::EventContainer};
 use async_trait::async_trait;
 use bcr_common::core::{BillId, NodeId};
+use bcr_ebill_api::service::transport_service::ResyncMode;
 use bcr_ebill_core::protocol::crypto::BcrKeys;
 use bcr_ebill_core::{
     application::ServiceTraitBounds,
@@ -102,7 +103,12 @@ pub trait BillChainEventProcessorApi: ServiceTraitBounds {
     /// Tries to resync the chain for the given bill id. If `from_nostr` is true, this will try to
     /// find the bill keys and then try to find the chain data from Nostr. Will add all potentially
     /// missing blocks to the chain. If `from_nostr` is false, only invalidates the local cache.
-    async fn resync_chain(&self, bill_id: &BillId, from_nostr: bool) -> Result<()>;
+    async fn resync_chain(
+        &self,
+        bill_id: &BillId,
+        from_nostr: bool,
+        mode: ResyncMode,
+    ) -> Result<()>;
 
     /// Invalidates the cached bill data for the given bill id.
     async fn invalidate_cache_for_bill(&self, bill_id: &BillId) -> Result<()>;

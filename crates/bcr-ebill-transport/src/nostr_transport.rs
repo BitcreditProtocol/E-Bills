@@ -253,14 +253,14 @@ impl NostrTransportService {
             .chain_event_store
             .find_by_block_hash(previous_hash)
             .await
-            .map_err(|_| Error::Persistence("failed to read from chain events".to_owned()))?;
+            .map_err(|e| Error::Persistence(format!("failed to read from chain events: {e}")))?;
 
         // if there is a previous and it is not the root event, also get the root event
         let root_event = if previous_event.clone().is_some_and(|f| !f.is_root_event()) {
             self.chain_event_store
                 .find_root_event(chain_id, chain_type)
                 .await
-                .map_err(|_| Error::Persistence("failed to read from chain events".to_owned()))?
+                .map_err(|e| Error::Persistence(format!("failed to read from chain events: {e}")))?
         } else {
             previous_event.clone()
         };

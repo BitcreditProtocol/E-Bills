@@ -7,6 +7,7 @@ use bcr_ebill_api::service::{
     Error,
     bill_service::Error as BillServiceError,
     file_upload_service::{UploadFileHandler, detect_content_type_for_bytes},
+    transport_service::ResyncMode,
 };
 use bcr_ebill_core::{
     application::{
@@ -37,15 +38,15 @@ use crate::{
         Base64FileResponse, BinaryFileResponse, UploadFile, UploadFileResponse,
         bill::{
             AcceptBitcreditBillPayload, BillCheckSweepBTCFundsPayload, BillCombinedBitcoinKeyWeb,
-            BillHistoryResponse, BillIdResponse, BillSweepBTCEstimateWeb, BillSweepBTCFundsPayload,
-            BillSweepBTCFundsResultWeb, BillsResponse, BillsSearchFilterPayload,
-            BitcreditBillPayload, BitcreditBillWeb, EndorseBitcreditBillPayload,
-            EndorsementsResponse, LightBillsResponse, OfferToSellBitcreditBillPayload,
-            PastEndorseesResponse, PastPaymentsResponse, RejectActionBillPayload,
-            RequestRecourseForAcceptancePayload, RequestRecourseForPaymentPayload,
-            RequestToAcceptBitcreditBillPayload, RequestToMintBitcreditBillPayload,
-            RequestToPayAsMintBitcreditBillPayload, RequestToPayBitcreditBillPayload,
-            ResyncBillPayload, ShareBillWithCourtPayload,
+            BillHistoryResponse, BillIdResponse, BillResetMintQuoteState, BillSweepBTCEstimateWeb,
+            BillSweepBTCFundsPayload, BillSweepBTCFundsResultWeb, BillsResponse,
+            BillsSearchFilterPayload, BitcreditBillPayload, BitcreditBillWeb,
+            EndorseBitcreditBillPayload, EndorsementsResponse, LightBillsResponse,
+            OfferToSellBitcreditBillPayload, OverrideBillFromNostrPayload, PastEndorseesResponse,
+            PastPaymentsResponse, RejectActionBillPayload, RequestRecourseForAcceptancePayload,
+            RequestRecourseForPaymentPayload, RequestToAcceptBitcreditBillPayload,
+            RequestToMintBitcreditBillPayload, RequestToPayAsMintBitcreditBillPayload,
+            RequestToPayBitcreditBillPayload, ResyncBillPayload, ShareBillWithCourtPayload,
         },
         mint::MintRequestStateResponse,
         parse_deadline_string,
@@ -1077,7 +1078,48 @@ impl Bill {
             get_ctx()
                 .transport_service
                 .block_transport()
-                .resync_bill_chain(&payload.bill_id, payload.from_nostr.unwrap_or(false))
+                .resync_bill_chain(
+                    &payload.bill_id,
+                    payload.from_nostr.unwrap_or(false),
+                    ResyncMode::Normal,
+                )
+                .await?;
+            Ok(())
+        }
+        .await;
+        TSResult::res_to_js(res)
+    }
+
+    /// Given a bill id, override the bill chain with the state from nostr
+    #[wasm_bindgen(unchecked_return_type = "TSResult<void>")]
+    pub async fn dev_mode_override_bill_chain_from_nostr(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "OverrideBillFromNostrPayload")] payload: JsValue,
+    ) -> JsValue {
+        let res: Result<()> = async {
+            let payload: OverrideBillFromNostrPayload = serde_wasm_bindgen::from_value(payload)?;
+            get_ctx()
+                .transport_service
+                .block_transport()
+                .resync_bill_chain(&payload.bill_id, true, ResyncMode::NostrAuthoritative)
+                .await?;
+            Ok(())
+        }
+        .await;
+        TSResult::res_to_js(res)
+    }
+
+    /// Given a bill id, reset the local mint quote state for this bill
+    #[wasm_bindgen(unchecked_return_type = "TSResult<void>")]
+    pub async fn dev_mode_reset_bill_mint_quote_state(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "BillResetMintQuoteState")] payload: JsValue,
+    ) -> JsValue {
+        let res: Result<()> = async {
+            let payload: BillResetMintQuoteState = serde_wasm_bindgen::from_value(payload)?;
+            get_ctx()
+                .bill_service
+                .dev_mode_reset_bill_mint_quote_state(&payload.bill_id)
                 .await?;
             Ok(())
         }

@@ -23,7 +23,7 @@ codegen-units = 1 # Reduces binary size at the cost of compile time
 opt-level = 1 # Avoid surrealdb index out of bounds issue in dev build
 
 [workspace.dependencies]
-sha2 = { version = "0.10", default-features = false }
+sha2 = { version = "0.11", default-features = false }
 borsh = "1.5"
 borsh-derive = "1.5"
 log = { version = "0.4", features = ["serde"] }
@@ -55,16 +55,16 @@ nostr = { version = "0.45", features = ["nip59"] }
 nostr-sdk = { version = "0.45" }
 getrandom = "0.4.3"
 async-broadcast = "0.7.2"
-rstest = "0.26"
+rstest = "0.27"
 reqwest = { version = "0.13", default-features = false }
-miniscript = { version = "12.3" }
+miniscript = { version = "13.1" }
 base64 = "0.23"
-mockall = "0.13.1"
+mockall = "0.15"
 bcr-ebill-core = { path = "./crates/bcr-ebill-core" }
 bcr-ebill-api = { path = "./crates/bcr-ebill-api" }
 bcr-ebill-persistence = { path = "./crates/bcr-ebill-persistence" }
 bcr-ebill-transport = { path = "./crates/bcr-ebill-transport" }
-bcr-common = { git = "https://github.com/BitcreditProtocol/bcr-common", rev = "d6a1388d7e6b9c425e8c727c0e6a1b64790752b7" }
+bcr-common = { git = "https://github.com/BitcreditProtocol/bcr-common", rev = "72ec8b546fdc64ac93e05f29aad7116aa3047be7" }
 surrealdb = { version = "2.3", default-features = false }
 strum = { version = "0.28", features = ["derive"] }
 url = { version = "2.5" }

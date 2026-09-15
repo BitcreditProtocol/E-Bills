@@ -120,10 +120,9 @@ pub fn get_combined_private_descriptor(
     let desc_pubkey = desc_seckey
         .to_public(bitcoin::secp256k1::global::SECP256K1)
         .map_err(|e| Error::BtcDescriptor(e.to_string()))?;
-    let kmap = miniscript::descriptor::KeyMap::from_iter(std::iter::once((
-        desc_pubkey.clone(),
-        desc_seckey,
-    )));
+    let mut kmap = miniscript::descriptor::KeyMap::new();
+    kmap.extend(std::iter::once((desc_pubkey.clone(), desc_seckey)));
+
     let desc = miniscript::Descriptor::new_tr(desc_pubkey, None)
         .map_err(|e| Error::BtcDescriptor(e.to_string()))?;
     let btc_desc = BtcDescriptor::new(desc.to_string_with_secret(&kmap))
@@ -474,8 +473,8 @@ pub mod tests {
             _ => panic!("expected taproot descriptor"),
         };
 
-        let kmap =
-            miniscript::descriptor::KeyMap::from_iter(std::iter::once((internal_key, desc_seckey)));
+        let mut kmap = miniscript::descriptor::KeyMap::new();
+        kmap.extend(std::iter::once((internal_key, desc_seckey)));
 
         let roundtripped_descriptor =
             BtcDescriptor::new(parsed_desc.to_string_with_secret(&kmap)).unwrap();
