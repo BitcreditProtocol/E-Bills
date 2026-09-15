@@ -1,6 +1,5 @@
 # 0.5.16
 
-* Add coding-agent guidance, simplify the PR template, and fix the contribution guide link
 * Upgrade Dependencies
     * especially Nostr 0.45 which had a lot of breaking changes
     * uses latest bcr-common with more custom ecash types
